@@ -241,6 +241,26 @@ button { cursor: pointer; }
 .legend em { font-style: normal; font-family: var(--font-num); font-weight: 600; font-variant-numeric: tabular-nums; }
 .legend small { text-align: right; color: var(--muted); font-family: var(--font-num); }
 
+/* Installations-Hinweis */
+.install { position: fixed; left: max(12px, env(safe-area-inset-left, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); bottom: calc(92px + env(safe-area-inset-bottom, 0px));
+  max-width: 460px; margin: 0 auto; z-index: 36; background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 18px;
+  box-shadow: 0 18px 50px rgba(8, 14, 28, .28); display: flex; flex-direction: column; gap: 14px; animation: up .35s cubic-bezier(.3, .8, .3, 1); }
+@keyframes up { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+.inst-x { position: absolute; top: 10px; right: 10px; }
+.inst-head { display: flex; gap: 12px; align-items: center; padding-right: 28px; }
+.inst-head img { width: 52px; height: 52px; border-radius: 13px; flex: 0 0 auto; }
+.inst-head strong { display: block; font-size: 17px; }
+.inst-head small { color: var(--muted); font-size: 13px; }
+.inst-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.inst-steps li { display: flex; gap: 12px; align-items: center; font-size: 15px; line-height: 1.35; }
+.inst-steps .n { width: 26px; height: 26px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 13px; display: grid; place-items: center; flex: 0 0 auto; }
+.inst-steps .ico { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: var(--bg); color: var(--accent); vertical-align: middle; margin: 0 2px; }
+.inst-steps small { display: block; color: var(--muted); font-size: 12.5px; }
+.inst-later { align-self: center; color: var(--muted); }
+.inst-arrow { position: fixed; left: 50%; bottom: calc(46px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 37; color: var(--accent); animation: bob 1.1s ease-in-out infinite; }
+@keyframes bob { 0%, 100% { transform: translate(-50%, 0); } 50% { transform: translate(-50%, 8px); } }
+@media (prefers-reduced-motion: reduce) { .inst-arrow, .install { animation: none; } }
+
 /* Konto */
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .acct-form { display: flex; flex-direction: column; gap: 10px; }
@@ -519,11 +539,8 @@ html.booting .view.on { animation: none; }
     </section>
     <section class="card" id="installCard">
       <div class="card-head"><h2>Auf den Home-Bildschirm</h2></div>
-      <ol class="steps">
-        <li>Öffne diese Seite in Safari.</li>
-        <li>Tippe unten auf das Teilen-Symbol.</li>
-        <li>Wähle „Zum Home-Bildschirm“.</li>
-      </ol>
+      <p class="muted small" style="margin:0">Dann hast du Finanzen wie eine echte App mit eigenem Symbol.</p>
+      <button class="btn full" id="installOpen">So geht's</button>
     </section>
     <p class="about" id="about"></p>
   </main>
@@ -551,13 +568,21 @@ html.booting .view.on { animation: none; }
   </div>
 </div>
 
+<div class="install" id="install" hidden role="dialog" aria-labelledby="instTitle">
+  <button class="x inst-x" id="instClose" aria-label="Schließen"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  <div class="inst-head"><img src="icon-180.png" alt=""><div><strong id="instTitle">Finanzen als App</strong><small>Mit eigenem Symbol auf deinem Home-Bildschirm</small></div></div>
+  <div id="instBody"></div>
+  <button class="link inst-later" id="instLater">Später</button>
+</div>
+<div class="inst-arrow" id="instArrow" hidden aria-hidden="true"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v15M5 12l7 7 7-7"/></svg></div>
+
 <div class="toast" id="toast" role="status" aria-live="polite"><span id="toastText"></span><button id="toastBtn" hidden>Rückgängig</button></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.js"></script>
 <script>
 (function () {
   "use strict";
-  var APP_VERSION = 7;
+  var APP_VERSION = 8;
   var KEY = "finanzplaner-v1";
   var TABS = ["uebersicht", "budget", "auswertung", "einstellungen"];
   var TYPES = [["fix", "Fest"], ["flex", "Flexibel"], ["semester", "Halbjährlich"]];
@@ -1288,6 +1313,79 @@ html.booting .view.on { animation: none; }
     window.addEventListener("online", function () { if (linked) sync(); });
   }
 
+  /* ---------- Hilfe beim Installieren auf den Home-Bildschirm ----------
+     iPhone in Safari: Schritte mit Pfeil auf den Teilen-Knopf.
+     Android (Chrome & Co.): echter „Installieren“-Knopf über beforeinstallprompt.
+     In anderen Browsern (WhatsApp, Instagram, Chrome auf dem iPhone): Hinweis, den Link in Safari zu öffnen. */
+  var instMode = null, deferredPrompt = null;
+  var SHARE_ICO = '<span class="ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7.5 7.5L12 3l4.5 4.5"/><path d="M6 11H5a1 1 0 0 0-1 1v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7a1 1 0 0 0-1-1h-1"/></svg></span>';
+  var PLUS_ICO = '<span class="ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M12 8v8M8 12h8"/></svg></span>';
+  function platform() {
+    var q = (location.search.match(/[?&]install=(\w+)/) || [])[1]; // nur zum Testen
+    if (q) return q;
+    var ua = navigator.userAgent || "";
+    var ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    if (ios) return /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|GSA|Instagram|FBAN|FBAV|Line\/|WhatsApp|Snapchat|TikTok/.test(ua) ? "ios" : "iosother";
+    if (/Android/.test(ua)) return "android";
+    return null;
+  }
+  function instBody(mode) {
+    if (mode === "android") {
+      return deferredPrompt ? '<button class="btn full" id="instBtn">Installieren</button>'
+        : '<ol class="inst-steps"><li><span class="n">1</span><span>Tippe oben rechts auf <b>⋮</b></span></li><li><span class="n">2</span><span>Wähle <b>„Zum Startbildschirm hinzufügen“</b> oder <b>„App installieren“</b></span></li></ol>';
+    }
+    if (mode === "iosother") {
+      return '<p class="muted" style="margin:0;font-size:15px">Das klappt nur in <b>Safari</b>. Kopiere den Link, öffne Safari und füge ihn oben ein.</p>' +
+        '<button class="btn full" id="instCopy">Link kopieren</button>';
+    }
+    return '<ol class="inst-steps">' +
+      '<li><span class="n">1</span><span>Tippe unten auf ' + SHARE_ICO + ' <b>Teilen</b><small>Siehst du es nicht? Erst auf <b>···</b> tippen.</small></span></li>' +
+      '<li><span class="n">2</span><span>Scroll runter und wähle ' + PLUS_ICO + ' <b>„Zum Home-Bildschirm“</b></span></li>' +
+      '<li><span class="n">3</span><span>Oben rechts auf <b>Hinzufügen</b> tippen. Fertig!</span></li></ol>';
+  }
+  function showInstall(force) {
+    if (standalone || !instMode) return;
+    if (!force) {
+      var last = 0; try { last = +localStorage.getItem("finanz-install-later") || 0; } catch (e) {}
+      if (Date.now() - last < 3 * 864e5) return;
+    }
+    $("instBody").innerHTML = instBody(instMode);
+    $("install").hidden = false;
+    $("instArrow").hidden = instMode !== "ios";
+  }
+  function hideInstall(later) {
+    $("install").hidden = true; $("instArrow").hidden = true;
+    if (later) try { localStorage.setItem("finanz-install-later", String(Date.now())); } catch (e) {}
+  }
+  function setupInstall() {
+    instMode = platform();
+    window.addEventListener("beforeinstallprompt", function (e) {
+      e.preventDefault(); deferredPrompt = e;
+      if (!instMode) instMode = "android";
+      if (!$("install").hidden || instMode === "android") showInstall(false);
+    });
+    window.addEventListener("appinstalled", function () { hideInstall(false); toast("Installiert. Du findest Finanzen jetzt auf deinem Startbildschirm."); });
+    $("instClose").addEventListener("click", function () { hideInstall(true); });
+    $("instLater").addEventListener("click", function () { hideInstall(true); });
+    $("installOpen").addEventListener("click", function () { if (!instMode) instMode = "ios"; showInstall(true); });
+    document.addEventListener("click", function (e) {
+      if (e.target.id === "instBtn" && deferredPrompt) {
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then(function (c) { deferredPrompt = null; if (c && c.outcome === "accepted") hideInstall(false); }).catch(function () {});
+      }
+      if (e.target.id === "instCopy") {
+        var url = location.origin + location.pathname;
+        var done = function () { toast("Link kopiert. Jetzt in Safari einfügen."); };
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, function () { prompt0(url); });
+        else prompt0(url);
+      }
+    });
+    // Nach dem Startbildschirm zeigen (auf Android zeigt es sich, sobald der Browser die Installation anbietet)
+    if (instMode && instMode !== "android") afterSplash.push(function () { setTimeout(function () { showInstall(false); }, 900); });
+    else if (instMode === "android") afterSplash.push(function () { setTimeout(function () { if (!deferredPrompt) showInstall(false); }, 4000); });
+  }
+  function prompt0(url) { toast("Link: " + url); }
+
   /* ---------- Meldung ---------- */
   var tt;
   function toast(text, onUndo) {
@@ -1312,6 +1410,7 @@ html.booting .view.on { animation: none; }
   })();
   var standalone = (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
   $("installCard").hidden = standalone;
+  setupInstall();
   $("about").textContent = "Finanzplaner · Version " + APP_VERSION;
   $("goal").value = plain(state.goal);
   applyTheme();
