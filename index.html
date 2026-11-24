@@ -162,6 +162,10 @@ button { cursor: pointer; }
 .x:active { background: var(--out-soft); color: var(--out); }
 .plus { align-self: flex-start; border: 1px dashed var(--line); background: transparent; color: var(--out); border-radius: 999px; padding: 9px 16px; font-weight: 600; font-size: 14px; }
 .plus:active { background: var(--out-soft); }
+.row.carry .val { font-family: var(--font-num); font-size: 17px; font-weight: 500; font-variant-numeric: tabular-nums; text-align: right; padding-right: 13px; color: var(--in); }
+.row.carry .val.neg { color: var(--out); }
+.row.carry { background: var(--surface-2); border-radius: 12px; border-top: 0; padding: 10px 0 10px 12px; margin-bottom: 4px; }
+.row.carry + .row { border-top: 0; }
 .total-row { border-radius: 12px; padding: 12px 0 12px 14px; font-weight: 600; }
 .total-row.in { background: var(--in-soft); }
 .total-row.out { background: var(--out-soft); }
@@ -299,6 +303,15 @@ html.booting .view.on { animation: none; }
       <p class="status" id="status"></p>
     </section>
 
+    <section class="card">
+      <div class="card-head"><h2>Monatsende</h2></div>
+      <div class="set-row">
+        <label for="actual" class="muted small">So viel Geld habe ich wirklich übrig</label>
+        <label class="field"><input id="actual" inputmode="decimal" autocomplete="off" enterkeyhint="done"><span>€</span></label>
+      </div>
+      <p class="small muted" id="actualNote" style="margin:0"></p>
+    </section>
+
     <div class="tiles">
       <div class="tile">
         <small>Pro Tag für Essen &amp; Freizeit</small>
@@ -416,7 +429,7 @@ html.booting .view.on { animation: none; }
 <script>
 (function () {
   "use strict";
-  var APP_VERSION = 2;
+  var APP_VERSION = 3;
   var KEY = "finanzplaner-v1";
   var TABS = ["uebersicht", "budget", "auswertung", "einstellungen"];
   var INCATS = ["Minijob", "BAföG", "Sonstiges"];
@@ -472,6 +485,7 @@ html.booting .view.on { animation: none; }
     m.expenses = norm((m.expenses || []).filter(function (i) { return i.cat !== "eigene"; }), OUTCATS, function (i) {
       return OUTCATS.indexOf(i.cat) > -1 ? i.cat : "Sonstiges";
     }).concat(custom);
+    m.actualLeft = (m.actualLeft === null || m.actualLeft === undefined || m.actualLeft === "" || !isFinite(+m.actualLeft)) ? null : +m.actualLeft;
     return m;
   }
   function month(k) {
@@ -484,6 +498,23 @@ html.booting .view.on { animation: none; }
   function monthly(x) { return x.cat === SEM ? x.amount / 6 : x.amount; }
   function sum(list) { return (list || []).reduce(function (a, x) { return a + monthly(x); }, 0); }
   function hasData(m) { return !!m && (sum(m.income) > 0 || sum(m.expenses) > 0); }
+
+  /* Übertrag: Was am Ende eines Monats übrig ist, kommt in den nächsten Monat.
+     Hat man den echten Rest eingetragen, zählt der. Sonst der geplante Rest (Einnahmen + Übertrag − Ausgaben). */
+  function monthResult(m) { return m ? sum(m.income) - sum(m.expenses) : 0; }
+  function endBalance(k, depth) {
+    var m = peek(k);
+    if (!m) return null;
+    if (m.actualLeft !== null && m.actualLeft !== undefined) return { v: m.actualLeft, kind: "echt" };
+    if (!hasData(m)) return null;
+    return { v: monthResult(m) + carryIn(k, depth).v, kind: "plan" };
+  }
+  function carryIn(k, depth) {
+    depth = (depth || 0) + 1;
+    if (depth > 36) return { v: 0, kind: null, src: null };
+    var src = addMonths(k, -1), e = endBalance(src, depth);
+    return e ? { v: Math.round(e.v * 100) / 100, kind: e.kind, src: src } : { v: 0, kind: null, src: src };
+  }
   function lastFilledBefore(k) {
     var keys = Object.keys(state.months).filter(function (x) { return x < k && hasData(state.months[x]); }).sort();
     return keys.length ? keys[keys.length - 1] : null;
@@ -524,8 +555,12 @@ html.booting .view.on { animation: none; }
     }).join("");
   }
   function renderBudget() {
-    var m = month();
-    $("inRows").innerHTML = rows("income", m.income);
+    var m = month(), c = carryIn(ui.cur);
+    var carryRow = c.kind ? '<div class="row carry"><div class="lbl"><span>Übertrag aus ' + MONTHS[+c.src.split("-")[1] - 1] + '</span><small>' +
+      (c.kind === "echt" ? "dein echter Rest vom Monatsende" : "geschätzt aus deinem Plan") + '</small></div><div class="val' + (c.v < 0 ? " neg" : "") + '">' +
+      fmt.format(c.v) + '</div><span></span></div>' : "";
+    $("inRows").innerHTML = carryRow + rows("income", m.income);
+    $("actual").value = m.actualLeft !== null ? String(m.actualLeft).replace(".", ",") : "";
     $("outRows").innerHTML = rows("expense", m.expenses);
   }
 
@@ -544,9 +579,11 @@ html.booting .view.on { animation: none; }
   }
 
   function refresh() {
-    var m = month();
-    var inc = sum(m.income), out = sum(m.expenses), left = inc - out;
+    var m = month(), c = carryIn(ui.cur);
+    var out = sum(m.expenses), base = sum(m.income) - out;
+    var inc = sum(m.income) + c.v, left = inc - out;
     var used = inc > 0 ? out / inc * 100 : (out > 0 ? 100 : 0);
+    var nextName = MONTHS[+addMonths(ui.cur, 1).split("-")[1] - 1];
 
     // Kopf und Ergebnis
     $("monthLabel").textContent = monthName(ui.cur);
@@ -559,6 +596,14 @@ html.booting .view.on { animation: none; }
       : left < 0 ? "Du gibst " + fmt.format(-left) + " mehr aus, als du einnimmst."
       : inc === 0 ? "Trag noch deine Einnahmen ein."
       : "Du hast " + Math.round(used) + " % deiner Einnahmen verplant.";
+    if (c.kind && c.v !== 0) $("status").textContent += " Inklusive " + fmt.format(c.v) + " Übertrag aus " + MONTHS[+c.src.split("-")[1] - 1] + ".";
+
+    // Monatsende: echter Rest
+    var an = $("actualNote");
+    $("actual").placeholder = plain(Math.max(0, Math.round(left * 100) / 100)) || "0";
+    an.textContent = m.actualLeft !== null
+      ? "Diese " + fmt.format(m.actualLeft) + " werden als Übertrag in den " + nextName + " übernommen."
+      : "Optional. Trag ein, was wirklich noch da ist. Ohne Eintrag rechnet der " + nextName + " mit dem geplanten Rest von " + fmt.format(left) + ".";
 
     // Willkommen / Übernehmen
     var anyData = Object.keys(state.months).some(function (k) { return hasData(state.months[k]); });
@@ -579,10 +624,11 @@ html.booting .view.on { animation: none; }
     if (!g) { $("goalVal").textContent = "–"; gn.textContent = "Tippe hier, um ein Sparziel festzulegen."; gn.className = "note"; }
     else {
       $("goalVal").textContent = fmt.format(g);
-      var reached = left >= g;
-      $("goalFill").style.width = Math.max(0, Math.min(100, left / g * 100)) + "%";
+      // Sparziel zählt nur, was in diesem Monat übrig bleibt, ohne Übertrag
+      var reached = base >= g;
+      $("goalFill").style.width = Math.max(0, Math.min(100, base / g * 100)) + "%";
       $("goalBar").className = "goalbar" + (reached ? "" : " bad");
-      gn.textContent = reached ? "Geschafft, " + fmt.format(left - g) + " mehr als geplant." : "Es fehlen noch " + fmt.format(g - Math.max(0, left)) + ".";
+      gn.textContent = reached ? "Geschafft, " + fmt.format(base - g) + " mehr als geplant." : "Es fehlen noch " + fmt.format(g - Math.max(0, base)) + ".";
       gn.className = "note " + (reached ? "good" : "bad");
     }
 
@@ -610,7 +656,7 @@ html.booting .view.on { animation: none; }
         var cut = Math.max(1, Math.round(flex.amount * 0.1));
         txt += " Am ehesten sparen kannst du bei <b>" + esc(flex.label) + "</b>. Schon " + fmt.format(cut) + " weniger im Monat sind " + fmt.format(cut * 12) + " im Jahr.";
       }
-      if (inc > 0 && left > 0) txt += " Wenn jeder Monat so läuft, bleiben dir im Jahr <b>" + fmt.format(left * 12) + "</b>.";
+      if (sum(m.income) > 0 && base > 0) txt += " Wenn jeder Monat so läuft, bleiben dir im Jahr <b>" + fmt.format(base * 12) + "</b>.";
       tip.innerHTML = txt; tip.hidden = false;
     }
 
@@ -626,7 +672,7 @@ html.booting .view.on { animation: none; }
         return '<div class="col' + (d.r < 0 ? " neg" : "") + (d.k === ui.cur ? " now" : "") + '"><span class="v">' + Math.round(d.r) + ' €</span>' +
           '<div class="b" style="height:' + Math.max(2, Math.abs(d.r) / maxAbs * 100).toFixed(1) + '%"></div><span class="m">' + MONTHS[mm].slice(0, 3) + '</span></div>';
       }).join("") + '</div>';
-      var table = '<div class="cmp-wrap"><table class="cmp"><thead><tr><th>Monat</th><th>Ein</th><th>Aus</th><th>Übrig</th></tr></thead><tbody>' +
+      var table = '<div class="cmp-wrap"><table class="cmp"><thead><tr><th>Monat</th><th>Ein</th><th>Aus</th><th>Ergebnis</th></tr></thead><tbody>' +
         data.slice().reverse().map(function (d) {
           var q = d.k.split("-");
           return '<tr' + (d.k === ui.cur ? ' class="now"' : '') + '><td>' + MONTHS[+q[1] - 1].slice(0, 3) + ' ' + q[0] + '</td><td>' + fmt0.format(d.i) + '</td><td>' + fmt0.format(d.o) +
@@ -711,6 +757,15 @@ html.booting .view.on { animation: none; }
     month().expenses.push(it); save(); render();
     var n = document.querySelector('.row[data-id="' + it.id + '"] .n'); if (n) n.focus();
   });
+
+  /* ---------- Monatsende ---------- */
+  $("actual").addEventListener("input", function () {
+    var t = this.value.trim(), v = parse(t), m = month();
+    m.actualLeft = t === "" || isNaN(v) ? null : v;
+    save(); refresh();
+  });
+  $("actual").addEventListener("focusout", function () { var m = month(); this.value = m.actualLeft !== null ? String(m.actualLeft).replace(".", ",") : ""; });
+  $("actual").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); this.blur(); } });
 
   /* ---------- Einstellungen ---------- */
   $("goal").addEventListener("input", function () { var v = parse(this.value); state.goal = isNaN(v) ? 0 : v; save(); refresh(); });
