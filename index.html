@@ -216,6 +216,31 @@ button { cursor: pointer; }
 .steps { margin: 0; padding-left: 20px; font-size: 14px; display: flex; flex-direction: column; gap: 4px; }
 .about { text-align: center; color: var(--muted); font-size: 12.5px; margin: 4px 0 0; }
 
+/* Übersicht: klare Karten mit großen Zahlen */
+.k { font-size: 13px; font-weight: 600; color: var(--muted); }
+.v { font-family: var(--font-num); font-size: 28px; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.spend-top { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; }
+.spend .v { color: var(--in); }
+.spend .v.over { color: var(--out); }
+.perday { display: flex; flex-direction: column; align-items: flex-end; background: var(--accent-soft); color: var(--accent); border-radius: 14px; padding: 8px 12px; }
+.perday span { font-family: var(--font-num); font-size: 18px; font-weight: 600; line-height: 1.1; }
+.perday small { font-size: 11.5px; font-weight: 600; }
+.goal-card { cursor: pointer; gap: 10px; }
+.goal-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.goal-card .v { font-size: 22px; }
+.pill { font-size: 13px; font-weight: 600; border-radius: 999px; padding: 5px 12px; background: var(--bg); color: var(--muted); white-space: nowrap; }
+.pill.good { background: var(--in-soft); color: var(--in); }
+.pill.bad { background: var(--out-soft); color: var(--out); }
+.stack { display: flex; height: 18px; border-radius: 99px; overflow: hidden; gap: 2px; background: var(--bg); }
+.stack i { display: block; height: 100%; min-width: 4px; }
+.legend { display: flex; flex-direction: column; margin-top: 12px; }
+.legend div { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto 44px; gap: 10px; align-items: center; padding: 9px 0; border-top: 1px solid var(--line); font-size: 14.5px; }
+.legend div:first-child { border-top: 0; }
+.legend b { width: 12px; height: 12px; border-radius: 4px; display: block; }
+.legend span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.legend em { font-style: normal; font-family: var(--font-num); font-weight: 600; font-variant-numeric: tabular-nums; }
+.legend small { text-align: right; color: var(--muted); font-family: var(--font-num); }
+
 /* Konto */
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .acct-form { display: flex; flex-direction: column; gap: 10px; }
@@ -255,7 +280,7 @@ button { cursor: pointer; }
 .ftrack .bar i { display: block; height: 100%; border-radius: 99px; background: var(--accent); transition: width .35s ease; }
 .ftrack.warn .bar i { background: #d99a1e; }
 .ftrack.over .bar i { background: var(--out); }
-.ftrack .info { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+.ftrack .info { display: none; }
 .ftrack .info .left { font-weight: 600; color: var(--in); }
 .ftrack.over .info .left { color: var(--out); }
 .spent-list { display: flex; flex-direction: column; }
@@ -356,13 +381,13 @@ html.booting .view.on { animation: none; }
   <!-- Übersicht -->
   <main class="view" data-tab="uebersicht">
     <div class="note-card" id="welcome" hidden>
-      <strong>Willkommen</strong>
-      <p>Trag unter Budget ein, was du im Monat bekommst und was du ausgibst. Mit „Kategorien bearbeiten“ passt du die Kategorien an dich an. Dann siehst du hier sofort, was dir übrig bleibt.</p>
+      <strong>Willkommen!</strong>
+      <p>Trag unter Budget ein, was du bekommst und was du ausgibst.</p>
       <button class="btn" data-go="budget">Jetzt eintragen</button>
     </div>
     <div class="note-card" id="acctNudge" hidden>
       <strong>Daten sichern</strong>
-      <p>Melde dich mit deiner E-Mail an. Dann werden deine Daten automatisch gespeichert und sind auf jedem Handy gleich. Ein Backup brauchst du dann nicht mehr.</p>
+      <p>Melde dich an, dann wird alles automatisch gespeichert.</p>
       <div class="btn-row"><button class="btn" data-go="einstellungen">Anmelden</button><button class="btn ghost" id="nudgeLater">Später</button></div>
     </div>
     <div class="note-card" id="carry" hidden>
@@ -383,41 +408,35 @@ html.booting .view.on { animation: none; }
       <p class="status" id="status"></p>
     </section>
 
-    <section class="card" id="trackCard">
-      <div class="card-head"><h2>Ausgaben im Blick</h2><span class="sum" id="freeHead"></span></div>
+    <section class="card spend" id="trackCard">
+      <div class="spend-top">
+        <div><div class="k">Noch zum Ausgeben</div><div class="v" id="freeHead">0,00 €</div></div>
+        <div class="perday" id="perDay" hidden><span id="perDayVal">0 €</span><small>pro Tag</small></div>
+      </div>
       <div class="track-list" id="trackList"></div>
       <button class="btn full" id="addSpend">+ Ausgabe eintragen</button>
       <div class="spent-list" id="spentList"></div>
       <button class="link" id="spentMore" hidden></button>
     </section>
 
-    <section class="card">
+    <section class="card goal-card" id="goalTile" data-go="einstellungen" role="button" tabindex="0">
+      <div class="goal-row"><div><div class="k">Sparziel</div><div class="v" id="goalVal">–</div></div><span class="pill" id="goalNote"></span></div>
+      <div class="goalbar" id="goalBar" hidden><i id="goalFill"></i></div>
+    </section>
+
+    <section class="card" id="endCard" hidden>
       <div class="card-head"><h2>Monatsende</h2></div>
       <div class="set-row">
-        <label for="actual" class="muted small">So viel Geld habe ich wirklich übrig</label>
+        <label for="actual" class="muted small">Echter Rest auf dem Konto</label>
         <label class="field"><input id="actual" inputmode="decimal" autocomplete="off" enterkeyhint="done"><span>€</span></label>
       </div>
       <p class="small muted" id="actualNote" style="margin:0"></p>
     </section>
 
-    <div class="tiles">
-      <div class="tile">
-        <small>Pro Tag noch frei</small>
-        <strong id="daily">0,00 €</strong>
-        <span class="note" id="dailyNote"></span>
-      </div>
-      <button class="tile" id="goalTile" data-go="einstellungen">
-        <small>Sparziel</small>
-        <strong id="goalVal">–</strong>
-        <div class="goalbar" id="goalBar" hidden><i id="goalFill"></i></div>
-        <span class="note" id="goalNote"></span>
-      </button>
-    </div>
-
     <section class="card">
-      <div class="card-head"><h2>Größte Ausgaben</h2></div>
-      <div class="bars" id="topBars"></div>
-      <button class="link" data-go="auswertung">Ganze Auswertung ansehen →</button>
+      <div class="card-head"><h2>Wofür dein Geld weggeht</h2></div>
+      <div id="topBars"></div>
+      <button class="link" data-go="auswertung">Mehr in der Auswertung →</button>
     </section>
   </main>
 
@@ -538,7 +557,7 @@ html.booting .view.on { animation: none; }
 <script>
 (function () {
   "use strict";
-  var APP_VERSION = 6;
+  var APP_VERSION = 7;
   var KEY = "finanzplaner-v1";
   var TABS = ["uebersicht", "budget", "auswertung", "einstellungen"];
   var TYPES = [["fix", "Fest"], ["flex", "Flexibel"], ["semester", "Halbjährlich"]];
@@ -746,6 +765,20 @@ html.booting .view.on { animation: none; }
       return { label: label(c), type: c.type, amount: c.type === "flex" ? Math.max(v, spentOf(m, c.id)) : monthlyOf(c, v) };
     }).filter(function (i) { return i.amount > 0; }).sort(function (a, b) { return b.amount - a.amount; });
   }
+  // Ein Balken mit allen Ausgaben in Farben, darunter die größten Posten
+  var PALETTE = ["#2457d6", "#13875a", "#e0a020", "#c8402c", "#7c5cc4", "#1f9bb0", "#8a96ab"];
+  function stackHtml(items, out) {
+    var top = items.slice(0, 5), rest = items.slice(5).reduce(function (a, i) { return a + i.amount; }, 0);
+    if (rest > 0) top.push({ label: "Weitere", amount: rest });
+    var total = top.reduce(function (a, i) { return a + i.amount; }, 0) || 1;
+    var bar = '<div class="stack" aria-hidden="true">' + top.map(function (i, n) {
+      return '<i style="flex:' + (i.amount / total).toFixed(4) + ';background:' + PALETTE[Math.min(n, PALETTE.length - 1)] + '"></i>';
+    }).join("") + '</div>';
+    var leg = '<div class="legend">' + top.map(function (i, n) {
+      return '<div><b style="background:' + PALETTE[Math.min(n, PALETTE.length - 1)] + '"></b><span>' + esc(i.label) + '</span><em>' + fmt0.format(i.amount) + '</em><small>' + pct(i.amount, total) + ' %</small></div>';
+    }).join("") + '</div>';
+    return bar + leg;
+  }
   function barsHtml(items, out) {
     var max = items[0].amount;
     return items.map(function (i) {
@@ -768,21 +801,20 @@ html.booting .view.on { animation: none; }
     var l = $("left"); l.textContent = fmt.format(left); l.className = "big" + (left < 0 ? " neg" : "");
     $("meterFill").style.width = Math.min(100, used) + "%";
     $("meter").className = "meter" + (left < 0 ? " over" : "");
-    $("status").textContent = inc === 0 && out === 0 ? "Noch nichts eingetragen."
-      : left < 0 ? "Du gibst " + fmt.format(-left) + " mehr aus, als du einnimmst."
-      : inc === 0 ? "Trag noch deine Einnahmen ein."
-      : "Du hast " + Math.round(used) + " % deiner Einnahmen verplant.";
-    if (c.kind && c.v !== 0) $("status").textContent += " Inklusive " + fmt.format(c.v) + " Übertrag aus " + MONTHS[+c.src.split("-")[1] - 1] + ".";
-    if (out - plan > 0.004) $("status").textContent += " Du hast " + fmt.format(out - plan) + " mehr ausgegeben als geplant.";
+    var st = inc === 0 && out === 0 ? "Noch nichts eingetragen"
+      : left < 0 ? fmt.format(-left) + " mehr ausgegeben als eingenommen"
+      : inc === 0 ? "Trag noch deine Einnahmen ein"
+      : Math.round(used) + " % deiner Einnahmen verplant";
+    if (c.kind && c.v !== 0) st += " · inkl. " + fmt0.format(c.v) + " aus " + MONTHS[+c.src.split("-")[1] - 1];
+    $("status").textContent = st;
 
     renderTrack(m);
 
-    // Monatsende: echter Rest
-    var an = $("actualNote");
+    // Monatsende: nur in der letzten Woche, in vergangenen Monaten oder wenn schon etwas eingetragen ist
+    var dl0 = daysLeft();
+    $("endCard").hidden = !(m.actualLeft !== null || (dl0.now && dl0.left <= 7) || (!dl0.now && dl0.left === 0 && hasData(m)));
     $("actual").placeholder = plain(Math.max(0, Math.round(left * 100) / 100)) || "0";
-    an.textContent = m.actualLeft !== null
-      ? "Diese " + fmt.format(m.actualLeft) + " werden als Übertrag in den " + nextName + " übernommen."
-      : "Optional. Trag ein, was wirklich noch da ist. Ohne Eintrag rechnet der " + nextName + " mit dem geplanten Rest von " + fmt.format(left) + ".";
+    $("actualNote").textContent = m.actualLeft !== null ? "Geht in den " + nextName + " über." : "Optional. Sonst nimmt der " + nextName + " den geplanten Rest.";
 
     // Willkommen / Übernehmen
     var anyData = Object.keys(state.months).some(function (k) { return hasData(state.months[k]); });
@@ -791,27 +823,17 @@ html.booting .view.on { animation: none; }
     $("carry").hidden = !src;
     if (src) { $("carryText").textContent = monthName(ui.cur) + " ist noch leer. Willst du die Beträge aus " + monthName(src) + " übernehmen?"; $("carryBtn").dataset.src = src; }
 
-    // Pro Tag noch frei: alle flexiblen Kategorien zusammen
-    var fp = 0, frest = 0, dl = daysLeft();
-    flexCats().forEach(function (fc) { var p = amt(m, "expense", fc.id); fp += p; frest += Math.max(0, p - spentOf(m, fc.id)); });
-    if (fp <= 0) { $("daily").textContent = fmt.format(0); $("dailyNote").textContent = "Plane unter Budget Beträge für flexible Kategorien wie Lebensmittel."; }
-    else if (dl.now) {
-      $("daily").textContent = fmt.format(frest / dl.left);
-      $("dailyNote").textContent = "noch " + fmt.format(frest) + " für " + dl.left + (dl.left === 1 ? " Tag" : " Tage");
-    } else { $("daily").textContent = fmt.format(fp / dl.days); $("dailyNote").textContent = fmt.format(fp) + " ÷ " + dl.days + " Tage"; }
-
-    // Sparziel
+    // Sparziel: zählt nur, was in diesem Monat übrig bleibt, ohne Übertrag
     var g = state.goal || 0, gn = $("goalNote");
     $("goalBar").hidden = !g;
-    if (!g) { $("goalVal").textContent = "–"; gn.textContent = "Tippe hier, um ein Sparziel festzulegen."; gn.className = "note"; }
+    if (!g) { $("goalVal").textContent = "–"; gn.textContent = "Festlegen"; gn.className = "pill"; }
     else {
-      $("goalVal").textContent = fmt.format(g);
-      // Sparziel zählt nur, was in diesem Monat übrig bleibt, ohne Übertrag
       var reached = base >= g;
+      $("goalVal").textContent = fmt0.format(g);
       $("goalFill").style.width = Math.max(0, Math.min(100, base / g * 100)) + "%";
       $("goalBar").className = "goalbar" + (reached ? "" : " bad");
-      gn.textContent = reached ? "Geschafft, " + fmt.format(base - g) + " mehr als geplant." : "Es fehlen noch " + fmt.format(g - Math.max(0, base)) + ".";
-      gn.className = "note " + (reached ? "good" : "bad");
+      gn.textContent = reached ? "Geschafft" : "Fehlt " + fmt0.format(g - Math.max(0, base));
+      gn.className = "pill " + (reached ? "good" : "bad");
     }
 
     // Budget-Summen
@@ -835,7 +857,7 @@ html.booting .view.on { animation: none; }
       $("bars").innerHTML = e; $("topBars").innerHTML = e; tip.hidden = true;
     } else {
       $("bars").innerHTML = barsHtml(items, out);
-      $("topBars").innerHTML = barsHtml(items.slice(0, 3), out);
+      $("topBars").innerHTML = stackHtml(items, out);
       var flex = items.filter(function (i) { return i.type === "flex"; })[0];
       var txt = "Am meisten gibst du für <b>" + esc(items[0].label) + "</b> aus: " + pct(items[0].amount, out) + " % deiner Ausgaben.";
       if (flex) {
@@ -876,30 +898,30 @@ html.booting .view.on { animation: none; }
   }
   var showAllSpent = false;
   function renderTrack(m) {
-    var dl = daysLeft(), html = "", free = 0, anyPlan = false, fc = flexCats();
+    var dl = daysLeft(), html = "", free = 0, over = 0, anyPlan = false, fc = flexCats();
     fc.forEach(function (c) {
       var p = amt(m, "expense", c.id), s = spentOf(m, c.id);
       if (p <= 0 && s <= 0) return;
       anyPlan = anyPlan || p > 0;
       var rest = p - s, pc = p > 0 ? s / p * 100 : 100;
       var cls = s > p ? " over" : pc >= 80 ? " warn" : "";
-      if (rest > 0) free += rest;
-      var perDay = dl.now && rest > 0 ? "≈ " + fmt.format(rest / dl.left) + " pro Tag" : "";
-      html += '<div class="ftrack' + cls + '"><div class="top"><span>' + esc(label(c)) + '</span><b>' + fmt.format(s) + ' <span class="muted" style="font-weight:500">von ' + fmt.format(p) + '</span></b></div>' +
-        '<div class="bar"><i style="width:' + Math.min(100, pc).toFixed(1) + '%"></i></div>' +
-        '<div class="info"><span class="left">' + (rest >= 0 ? "noch " + fmt.format(rest) + " übrig" : fmt.format(-rest) + " drüber") + '</span><span>' + perDay + '</span></div></div>';
+      if (rest > 0) free += rest; else over += -rest;
+      html += '<div class="ftrack' + cls + '"><div class="top"><span>' + esc(label(c)) + '</span><b>' +
+        (rest >= 0 ? fmt0.format(rest) + ' <span class="muted" style="font-weight:500">übrig</span>' : '<span style="color:var(--out)">' + fmt0.format(-rest) + ' drüber</span>') + '</b></div>' +
+        '<div class="bar"><i style="width:' + Math.min(100, pc).toFixed(1) + '%"></i></div></div>';
     });
-    $("trackList").innerHTML = html || (fc.length
-      ? '<p class="empty">Plane unter Budget, wie viel du für ' + fc.map(function (c) { return esc(label(c)); }).join(", ") + ' ausgeben willst. Danach trägst du hier nach jedem Einkauf ein, was du ausgegeben hast.</p>'
-      : '<p class="empty">Damit du hier Ausgaben eintragen kannst, stell unter Budget → Kategorien bearbeiten mindestens eine Kategorie auf „Flexibel“.</p>');
+    $("trackList").innerHTML = html || '<p class="empty">' + (fc.length ? "Plane unter Budget, wie viel du für " + fc.map(function (c) { return esc(label(c)); }).join(", ") + " ausgeben willst."
+      : "Stell unter Budget eine Kategorie auf „Flexibel“, um hier Ausgaben einzutragen.") + '</p>';
     $("addSpend").hidden = !fc.length;
     var fh = $("freeHead");
-    if (anyPlan) { fh.textContent = free > 0 ? "noch " + fmt.format(free) + " frei" : "Budget aufgebraucht"; fh.className = "sum " + (free > 0 ? "free" : "over"); }
-    else { fh.textContent = ""; }
+    fh.textContent = fmt.format(free); fh.className = "v" + (anyPlan && free <= 0 ? " over" : "");
+    var showDay = anyPlan && dl.left > 0 && free > 0;
+    $("perDay").hidden = !showDay;
+    if (showDay) $("perDayVal").textContent = fmt0.format(free / dl.left);
 
     var list = (m.spent || []).slice().sort(function (a, b) { return b.t - a.t; });
-    var shown = showAllSpent ? list : list.slice(0, 5);
-    $("spentList").innerHTML = list.length ? '<div class="title">Eingetragen</div>' + shown.map(function (s) {
+    var shown = showAllSpent ? list : list.slice(0, 3);
+    $("spentList").innerHTML = list.length ? '<div class="title">Zuletzt</div>' + shown.map(function (s) {
       var d = new Date(s.t), ds = String(d.getDate()).padStart(2, "0") + "." + String(d.getMonth() + 1).padStart(2, "0") + ".";
       var cc = catById(s.cat), cn = cc ? label(cc) : "Gelöschte Kategorie";
       return '<div class="sp" data-id="' + s.id + '"><span class="d">' + ds + '</span><div class="w"><span>' + esc(s.note || cn) + '</span>' +
@@ -907,8 +929,8 @@ html.booting .view.on { animation: none; }
         '<button class="x spx" aria-label="Eintrag löschen">' + X_ICON + '</button></div>';
     }).join("") : "";
     var more = $("spentMore");
-    more.hidden = list.length <= 5;
-    more.textContent = showAllSpent ? "Weniger anzeigen" : "Alle " + list.length + " Einträge anzeigen";
+    more.hidden = list.length <= 3;
+    more.textContent = showAllSpent ? "Weniger anzeigen" : "Alle " + list.length + " anzeigen";
   }
   $("spentMore").addEventListener("click", function () { showAllSpent = !showAllSpent; refresh(); });
   document.addEventListener("click", function (e) {
