@@ -1,0 +1,15 @@
+{
+  "name": "Finanzplaner",
+  "short_name": "Finanzen",
+  "description": "Einnahmen und Ausgaben im Monat planen und sehen, was übrig bleibt",
+  "lang": "de",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f2f4f8",
+  "theme_color": "#0f2347",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
