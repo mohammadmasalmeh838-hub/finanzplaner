@@ -145,7 +145,8 @@ button { cursor: pointer; }
 /* Zeilen mit Betragsfeld */
 .rows { display: flex; flex-direction: column; }
 .row { display: grid; grid-template-columns: minmax(0, 1fr) 128px 30px; gap: 8px; align-items: center; }
-.total-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 30px; gap: 8px; align-items: center; white-space: nowrap; }
+.total-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 30px; gap: 8px; align-items: center; }
+.total-row strong { white-space: nowrap; }
 .row { padding: 7px 0; border-top: 1px solid var(--line); }
 .row:first-child { border-top: 0; }
 .lbl { display: flex; flex-direction: column; min-width: 0; }
@@ -214,6 +215,20 @@ button { cursor: pointer; }
 .confirm .two { display: flex; gap: 8px; flex-wrap: wrap; }
 .steps { margin: 0; padding-left: 20px; font-size: 14px; display: flex; flex-direction: column; gap: 4px; }
 .about { text-align: center; color: var(--muted); font-size: 12.5px; margin: 4px 0 0; }
+
+/* Kategorien bearbeiten */
+.view-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.edit-btn { border: 0; background: var(--accent-soft); color: var(--accent); font-weight: 600; border-radius: 999px; padding: 8px 14px; font-size: 14px; margin-top: 6px; }
+.edit-btn[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
+.edit-hint { margin: 0; font-size: 13px; color: var(--muted); background: var(--surface); border-radius: 14px; padding: 12px 14px; box-shadow: var(--shadow); }
+.plus.in { color: var(--in); }
+.plus.in:active { background: var(--in-soft); }
+.row.editing { grid-template-columns: minmax(0, 1fr) 30px; }
+.lbl .cn { border: 1px solid var(--line); background: var(--surface-2); border-radius: 10px; height: 42px; padding: 0 10px; min-width: 0; width: 100%; font-weight: 500; font-size: 16px; outline: none; }
+.lbl .cn:focus { border-color: var(--accent); background: var(--surface); }
+.types { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.types button { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 4px 10px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.types button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 
 /* Ausgaben im Blick */
 .sum.free { color: var(--in); } .sum.over { color: var(--out); }
@@ -328,7 +343,7 @@ html.booting .view.on { animation: none; }
   <main class="view" data-tab="uebersicht">
     <div class="note-card" id="welcome" hidden>
       <strong>Willkommen</strong>
-      <p>Trag ein, was du im Monat bekommst und was du ausgibst. Dann siehst du hier sofort, was dir übrig bleibt.</p>
+      <p>Trag unter Budget ein, was du im Monat bekommst und was du ausgibst. Mit „Kategorien bearbeiten“ passt du die Kategorien an dich an. Dann siehst du hier sofort, was dir übrig bleibt.</p>
       <button class="btn" data-go="budget">Jetzt eintragen</button>
     </div>
     <div class="note-card" id="carry" hidden>
@@ -368,7 +383,7 @@ html.booting .view.on { animation: none; }
 
     <div class="tiles">
       <div class="tile">
-        <small>Pro Tag für Essen &amp; Freizeit</small>
+        <small>Pro Tag noch frei</small>
         <strong id="daily">0,00 €</strong>
         <span class="note" id="dailyNote"></span>
       </div>
@@ -389,10 +404,12 @@ html.booting .view.on { animation: none; }
 
   <!-- Budget -->
   <main class="view" data-tab="budget">
-    <h2 class="view-title">Budget</h2>
+    <div class="view-head"><h2 class="view-title">Budget</h2><button class="edit-btn" id="editBtn" aria-pressed="false">Kategorien bearbeiten</button></div>
+    <p class="edit-hint" id="editHint" hidden>Tippe auf einen Namen, um ihn zu ändern. Mit × löschst du eine Kategorie. <b>Flexibel</b> heißt: Du trägst in der Übersicht nach jedem Einkauf ein, was du wirklich ausgegeben hast. <b>Halbjährlich</b> wird durch 6 geteilt, z. B. für einen Semesterbeitrag.</p>
     <section class="card">
       <div class="card-head"><span class="badge in">+</span><h2>Einnahmen</h2><span class="sum in" id="inHead"></span></div>
       <div class="rows" id="inRows"></div>
+      <button class="plus in" id="addInc">+ Neue Einnahme</button>
       <div class="total-row in"><span>Einnahmen gesamt</span><strong id="inSum"></strong><span></span></div>
     </section>
     <section class="card">
@@ -497,18 +514,20 @@ html.booting .view.on { animation: none; }
 <script>
 (function () {
   "use strict";
-  var APP_VERSION = 4;
+  var APP_VERSION = 5;
   var KEY = "finanzplaner-v1";
   var TABS = ["uebersicht", "budget", "auswertung", "einstellungen"];
-  var INCATS = ["Minijob", "BAföG", "Sonstiges"];
-  var OUTCATS = ["Miete", "Handy & Internet", "Essen, Trinken & Freizeit", "Abos", "Semesterbeitrag", "Sonstiges"];
-  var SUBS = { "Handy & Internet": "z. B. mobile Daten", "Abos": "Gym, Spotify, Netflix …" };
-  var FIXED = ["Miete", "Handy & Internet", "Semesterbeitrag"];
-  var FOOD = "Essen, Trinken & Freizeit";
-  var SEM = "Semesterbeitrag";
-  // Flexible Bereiche: hier trägt man nach jedem Einkauf ein, was wirklich ausgegeben wurde
-  var FLEX = [FOOD, "Sonstiges"];
-  var FLEX_SHORT = { "Essen, Trinken & Freizeit": "Essen & Freizeit", "Sonstiges": "Sonstiges" };
+  var TYPES = [["fix", "Fest"], ["flex", "Flexibel"], ["semester", "Halbjährlich"]];
+  // Start-Kategorien für neue Nutzer. Jeder kann sie unter Budget umbenennen, löschen oder ergänzen.
+  var DEFAULT_CATS = {
+    income: [{ name: "Gehalt / Lohn" }, { name: "Sonstige Einnahmen" }],
+    expense: [
+      { name: "Miete", type: "fix" }, { name: "Handy & Internet", type: "fix" }, { name: "Versicherungen", type: "fix" },
+      { name: "Abos", type: "fix" }, { name: "Lebensmittel", type: "flex" }, { name: "Freizeit", type: "flex" }, { name: "Sonstiges", type: "flex" }
+    ]
+  };
+  var OLD_IN = ["Minijob", "BAföG", "Sonstiges"];
+  var OLD_OUT = [["Miete", "fix"], ["Handy & Internet", "fix"], ["Essen, Trinken & Freizeit", "flex"], ["Abos", "fix"], ["Semesterbeitrag", "semester"], ["Sonstiges", "flex"]];
   var MONTHS = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
   var fmt = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" });
   var fmt0 = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
@@ -520,19 +539,63 @@ html.booting .view.on { animation: none; }
   function addMonths(k, n) { var p = k.split("-"); return keyOf(new Date(+p[0], +p[1] - 1 + n, 1)); }
   function monthName(k) { var p = k.split("-"); return MONTHS[+p[1] - 1] + " " + p[0]; }
   function today() { return keyOf(new Date()); }
+  function num(n) { n = +n; return isFinite(n) && n >= 0 ? n : 0; }
 
   var state = load();
-  var ui = { tab: "uebersicht", cur: today() };
+  var ui = { tab: "uebersicht", cur: today(), edit: false };
   var storageOk = true;
   var splashOn = true, afterSplash = [];
 
-  function blank() { return { v: 1, months: {}, goal: 0, theme: "system" }; }
+  function newCats(src) {
+    return {
+      income: src.income.map(function (c) { return { id: uid(), name: c.name }; }),
+      expense: src.expense.map(function (c) { return { id: uid(), name: c.name, type: c.type || "fix" }; })
+    };
+  }
+  function blank() { return { v: 2, months: {}, goal: 0, theme: "system", cats: newCats(DEFAULT_CATS) }; }
   function valid(d) { return d && typeof d === "object" && d.months && typeof d.months === "object"; }
+
+  /* Bis Version 4 waren die Kategorien fest eingebaut und die Monate als Listen gespeichert.
+     Hier werden alte Daten in die neue Form gebracht: eigene Kategorien mit IDs, Beträge pro Kategorie. Es geht nichts verloren. */
+  function migrate(d) {
+    var b = blank();
+    for (var k in b) if (!(k in d)) d[k] = b[k];
+    var keys = Object.keys(d.months);
+    var old = keys.some(function (k) { var m = d.months[k]; return m && (Array.isArray(m.income) || Array.isArray(m.expenses)); });
+    if (old || d.v !== 2 || !d.cats) {
+      if (old) {
+        var inIds = {}, outIds = {}, cats = { income: [], expense: [] };
+        OLD_IN.forEach(function (n) { var id = uid(); inIds[n] = id; cats.income.push({ id: id, name: n }); });
+        OLD_OUT.forEach(function (p) { var id = uid(); outIds[p[0]] = id; cats.expense.push({ id: id, name: p[0], type: p[1] }); });
+        keys.forEach(function (k) {
+          var m = d.months[k] || {}, inc = {}, exp = {};
+          (Array.isArray(m.income) ? m.income : []).forEach(function (i) {
+            var id = inIds[i.cat] || inIds["Sonstiges"]; inc[id] = (inc[id] || 0) + num(i.amount);
+          });
+          (Array.isArray(m.expenses) ? m.expenses : []).forEach(function (i) {
+            var id;
+            if (i.cat === "eigene") {
+              var name = String(i.name || "").trim() || "Weitere Ausgabe";
+              if (!outIds[name]) { outIds[name] = uid(); cats.expense.push({ id: outIds[name], name: name, type: "fix" }); }
+              id = outIds[name];
+            } else id = outIds[i.cat] || outIds["Sonstiges"];
+            exp[id] = (exp[id] || 0) + num(i.amount);
+          });
+          var spent = (Array.isArray(m.spent) ? m.spent : []).map(function (s) { return { id: s.id, amount: s.amount, cat: outIds[s.cat] || outIds["Sonstiges"], note: s.note, t: s.t }; });
+          d.months[k] = { income: inc, expenses: exp, actualLeft: m.actualLeft, spent: spent };
+        });
+        d.cats = cats;
+      } else if (!d.cats) d.cats = newCats(DEFAULT_CATS);
+      d.v = 2;
+    }
+    d.cats.income = (d.cats.income || []).filter(function (c) { return c && c.id; }).map(function (c) { return { id: c.id, name: String(c.name || "") }; });
+    d.cats.expense = (d.cats.expense || []).filter(function (c) { return c && c.id; }).map(function (c) { return { id: c.id, name: String(c.name || ""), type: ["fix", "flex", "semester"].indexOf(c.type) > -1 ? c.type : "fix" }; });
+    Object.keys(d.months).forEach(function (k) { d.months[k] = normalize(d.months[k] || {}); });
+    d.goal = num(d.goal);
+    return d;
+  }
   function load() {
-    try {
-      var d = JSON.parse(localStorage.getItem(KEY));
-      if (valid(d)) { var b = blank(); for (var k in b) if (!(k in d)) d[k] = b[k]; return d; }
-    } catch (e) {}
+    try { var d = JSON.parse(localStorage.getItem(KEY)); if (valid(d)) return migrate(d); } catch (e) {}
     return blank();
   }
   function save() {
@@ -540,53 +603,47 @@ html.booting .view.on { animation: none; }
     catch (e) { if (storageOk) toast("Speichern hat nicht geklappt. Ist der Speicher voll?"); storageOk = false; }
   }
 
-  function num(n) { n = +n; return isFinite(n) && n >= 0 ? n : 0; }
-  function norm(list, cats, pick) {
-    var by = {};
-    (list || []).forEach(function (i) {
-      var c = pick(i);
-      if (by[c]) by[c].amount += num(i.amount); else by[c] = { id: i.id || uid(), amount: num(i.amount), cat: c };
-    });
-    return cats.map(function (c) { return by[c] || { id: uid(), amount: 0, cat: c }; });
-  }
+  function cleanMap(o) { var r = {}; if (o && typeof o === "object" && !Array.isArray(o)) for (var k in o) { var v = num(o[k]); if (v > 0) r[k] = Math.round(v * 100) / 100; } return r; }
   function normalize(m) {
-    m.income = norm(m.income, INCATS, function (i) { return INCATS.indexOf(i.cat) > -1 ? i.cat : "Sonstiges"; });
-    var custom = (m.expenses || []).filter(function (i) { return i.cat === "eigene"; })
-      .map(function (i) { return { id: i.id || uid(), name: String(i.name || ""), amount: num(i.amount), cat: "eigene" }; });
-    m.expenses = norm((m.expenses || []).filter(function (i) { return i.cat !== "eigene"; }), OUTCATS, function (i) {
-      return OUTCATS.indexOf(i.cat) > -1 ? i.cat : "Sonstiges";
-    }).concat(custom);
+    m.income = cleanMap(m.income);
+    m.expenses = cleanMap(m.expenses);
     m.actualLeft = (m.actualLeft === null || m.actualLeft === undefined || m.actualLeft === "" || !isFinite(+m.actualLeft)) ? null : +m.actualLeft;
     m.spent = (Array.isArray(m.spent) ? m.spent : []).filter(function (s) {
-      return s && isFinite(+s.amount) && +s.amount > 0 && FLEX.indexOf(s.cat) > -1;
+      return s && s.cat && isFinite(+s.amount) && +s.amount > 0;
     }).map(function (s) {
       return { id: s.id || uid(), amount: Math.round(+s.amount * 100) / 100, cat: s.cat, note: String(s.note || ""), t: +s.t || Date.now() };
     });
     return m;
   }
+  function emptyMonth() { return normalize({}); }
   function month(k) {
     k = k || ui.cur;
-    if (!state.months[k]) state.months[k] = normalize({ income: [], expenses: [] });
+    if (!state.months[k]) state.months[k] = emptyMonth();
     return state.months[k];
   }
   function peek(k) { return state.months[k] || null; }
 
-  function monthly(x) { return x.cat === SEM ? x.amount / 6 : x.amount; }
-  function sum(list) { return (list || []).reduce(function (a, x) { return a + monthly(x); }, 0); }
-  function hasData(m) { return !!m && (sum(m.income) > 0 || sum(m.expenses) > 0); }
+  function cats(kind) { return kind === "income" ? state.cats.income : state.cats.expense; }
+  function catById(id) { var r = null; state.cats.expense.concat(state.cats.income).forEach(function (c) { if (c.id === id) r = c; }); return r; }
+  function flexCats() { return state.cats.expense.filter(function (c) { return c.type === "flex"; }); }
+  function mapOf(m, kind) { return kind === "income" ? m.income : m.expenses; }
+  function amt(m, kind, id) { return (mapOf(m, kind) || {})[id] || 0; }
+  function monthlyOf(c, v) { return c.type === "semester" ? v / 6 : v; }
+  function sumIn(m) { return state.cats.income.reduce(function (a, c) { return a + amt(m, "income", c.id); }, 0); }
+  function planOut(m) { return state.cats.expense.reduce(function (a, c) { return a + monthlyOf(c, amt(m, "expense", c.id)); }, 0); }
+  function hasData(m) { return !!m && (sumIn(m) > 0 || planOut(m) > 0); }
 
-  /* Übertrag: Was am Ende eines Monats übrig ist, kommt in den nächsten Monat.
-     Hat man den echten Rest eingetragen, zählt der. Sonst der geplante Rest (Einnahmen + Übertrag − Ausgaben). */
-  // Geplant vs. wirklich ausgegeben in den flexiblen Bereichen
-  function plannedOf(m, cat) { var s = 0; m.expenses.forEach(function (e) { if (e.cat === cat) s += e.amount; }); return s; }
-  function spentOf(m, cat) { var s = 0; (m.spent || []).forEach(function (e) { if (e.cat === cat) s += e.amount; }); return Math.round(s * 100) / 100; }
+  // Geplant vs. wirklich ausgegeben in den flexiblen Kategorien
+  function spentOf(m, id) { var s = 0; (m.spent || []).forEach(function (e) { if (e.cat === id) s += e.amount; }); return Math.round(s * 100) / 100; }
   // Ausgaben mit echten Zahlen: Wer mehr ausgibt als geplant, bei dem zählt der höhere Betrag
   function effOut(m) {
-    var o = sum(m.expenses);
-    FLEX.forEach(function (c) { o += Math.max(0, spentOf(m, c) - plannedOf(m, c)); });
+    var o = planOut(m);
+    flexCats().forEach(function (c) { o += Math.max(0, spentOf(m, c.id) - amt(m, "expense", c.id)); });
     return o;
   }
-  function monthResult(m) { return m ? sum(m.income) - effOut(m) : 0; }
+  /* Übertrag: Was am Ende eines Monats übrig ist, kommt in den nächsten Monat.
+     Hat man den echten Rest eingetragen, zählt der. Sonst der geplante Rest (Einnahmen + Übertrag − Ausgaben). */
+  function monthResult(m) { return m ? sumIn(m) - effOut(m) : 0; }
   function endBalance(k, depth) {
     var m = peek(k);
     if (!m) return null;
@@ -606,10 +663,7 @@ html.booting .view.on { animation: none; }
   }
   function copyFrom(src) {
     var s = state.months[src];
-    return normalize({
-      income: s.income.map(function (x) { return { id: uid(), amount: x.amount, cat: x.cat }; }),
-      expenses: s.expenses.map(function (x) { return { id: uid(), name: x.name || "", amount: x.amount, cat: x.cat }; })
-    });
+    return normalize({ income: JSON.parse(JSON.stringify(s.income)), expenses: JSON.parse(JSON.stringify(s.expenses)) });
   }
 
   function parse(s) {
@@ -622,40 +676,47 @@ html.booting .view.on { animation: none; }
   function plain(n) { return n ? String(n).replace(".", ",") : ""; }
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
   function pct(a, b) { return b > 0 ? Math.round(a / b * 100) : 0; }
+  function label(c) { return c.name.trim() || "Ohne Namen"; }
 
   /* ---------- Budget-Zeilen ---------- */
-  function field(i, label) {
-    return '<label class="field"><input class="a" value="' + plain(i.amount) + '" placeholder="0" inputmode="decimal" enterkeyhint="next" autocomplete="off" aria-label="' + esc(label) + ' in Euro"><span>€</span></label>';
-  }
   var X_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
-  function rows(kind, list) {
-    return list.map(function (i) {
-      var head = '<div class="row" data-kind="' + kind + '" data-id="' + i.id + '">';
-      if (i.cat === "eigene") {
-        return head + '<div class="lbl"><input class="n" value="' + esc(i.name) + '" placeholder="Wofür? z. B. Netflix" autocomplete="off" aria-label="Wofür"></div>' +
-          field(i, i.name || "Ausgabe") + '<button class="x" aria-label="Ausgabe löschen">' + X_ICON + '</button></div>';
+  function rows(kind, m) {
+    var list = cats(kind);
+    if (!list.length) return '<p class="empty">Noch keine Kategorie. Füge unten eine hinzu.</p>';
+    return list.map(function (c) {
+      var head = '<div class="row' + (ui.edit ? " editing" : "") + '" data-kind="' + kind + '" data-cat="' + c.id + '">';
+      if (ui.edit) {
+        var types = kind === "expense" ? '<div class="types" role="group" aria-label="Art">' + TYPES.map(function (t) {
+          return '<button type="button" data-type="' + t[0] + '" aria-pressed="' + (c.type === t[0]) + '">' + t[1] + '</button>';
+        }).join("") + '</div>' : "";
+        return head + '<div class="lbl"><input class="cn" value="' + esc(c.name) + '" placeholder="Name, z. B. ' + (kind === "income" ? "Nebenjob" : "Fitnessstudio") + '" autocomplete="off" aria-label="Name der Kategorie">' + types + '</div>' +
+          '<button class="x cdel" aria-label="Kategorie löschen">' + X_ICON + '</button></div>';
       }
-      var sub = i.cat === SEM ? '<small class="semnote"></small>'
-        : kind === "expense" && FLEX.indexOf(i.cat) > -1 ? '<small class="spentnote" data-cat="' + esc(i.cat) + '"></small>'
-        : (kind === "expense" && SUBS[i.cat] ? '<small>' + esc(SUBS[i.cat]) + '</small>' : "");
-      return head + '<div class="lbl"><span>' + esc(i.cat) + '</span>' + sub + '</div>' + field(i, i.cat) + '<span></span></div>';
+      var sub = kind === "expense" && c.type === "semester" ? '<small class="semnote" data-cat="' + c.id + '"></small>'
+        : kind === "expense" && c.type === "flex" ? '<small class="spentnote" data-cat="' + c.id + '"></small>' : "";
+      var v = amt(m, kind, c.id);
+      return head + '<div class="lbl"><span>' + esc(label(c)) + '</span>' + sub + '</div>' +
+        '<label class="field"><input class="a" value="' + plain(v) + '" placeholder="0" inputmode="decimal" enterkeyhint="next" autocomplete="off" aria-label="' + esc(label(c)) + ' in Euro"><span>€</span></label><span></span></div>';
     }).join("");
   }
   function renderBudget() {
     var m = month(), c = carryIn(ui.cur);
-    var carryRow = c.kind ? '<div class="row carry"><div class="lbl"><span>Übertrag aus ' + MONTHS[+c.src.split("-")[1] - 1] + '</span><small>' +
+    var carryRow = c.kind && !ui.edit ? '<div class="row carry"><div class="lbl"><span>Übertrag aus ' + MONTHS[+c.src.split("-")[1] - 1] + '</span><small>' +
       (c.kind === "echt" ? "dein echter Rest vom Monatsende" : "geschätzt aus deinem Plan") + '</small></div><div class="val' + (c.v < 0 ? " neg" : "") + '">' +
       fmt.format(c.v) + '</div><span></span></div>' : "";
-    $("inRows").innerHTML = carryRow + rows("income", m.income);
+    $("inRows").innerHTML = carryRow + rows("income", m);
+    $("outRows").innerHTML = rows("expense", m);
     $("actual").value = m.actualLeft !== null ? String(m.actualLeft).replace(".", ",") : "";
-    $("outRows").innerHTML = rows("expense", m.expenses);
+    $("editBtn").textContent = ui.edit ? "Fertig" : "Kategorien bearbeiten";
+    $("editBtn").setAttribute("aria-pressed", ui.edit ? "true" : "false");
+    $("editHint").hidden = !ui.edit;
   }
 
   /* ---------- Zahlen und Auswertung ---------- */
   function expenseItems(m) {
-    return m.expenses.map(function (e) {
-      var a = FLEX.indexOf(e.cat) > -1 ? Math.max(e.amount, spentOf(m, e.cat)) : monthly(e);
-      return { label: e.cat === "eigene" ? (e.name.trim() || "Ohne Namen") : e.cat, amount: a };
+    return state.cats.expense.map(function (c) {
+      var v = amt(m, "expense", c.id);
+      return { label: label(c), type: c.type, amount: c.type === "flex" ? Math.max(v, spentOf(m, c.id)) : monthlyOf(c, v) };
     }).filter(function (i) { return i.amount > 0; }).sort(function (a, b) { return b.amount - a.amount; });
   }
   function barsHtml(items, out) {
@@ -668,8 +729,8 @@ html.booting .view.on { animation: none; }
 
   function refresh() {
     var m = month(), c = carryIn(ui.cur);
-    var plan = sum(m.expenses), out = effOut(m), base = sum(m.income) - out;
-    var inc = sum(m.income) + c.v, left = inc - out;
+    var plan = planOut(m), out = effOut(m), base = sumIn(m) - out;
+    var inc = sumIn(m) + c.v, left = inc - out;
     var used = inc > 0 ? out / inc * 100 : (out > 0 ? 100 : 0);
     var nextName = MONTHS[+addMonths(ui.cur, 1).split("-")[1] - 1];
 
@@ -703,14 +764,14 @@ html.booting .view.on { animation: none; }
     $("carry").hidden = !src;
     if (src) { $("carryText").textContent = monthName(ui.cur) + " ist noch leer. Willst du die Beträge aus " + monthName(src) + " übernehmen?"; $("carryBtn").dataset.src = src; }
 
-    // Tagesbudget
-    var food = plannedOf(m, FOOD), dl = daysLeft();
-    if (food <= 0) { $("daily").textContent = fmt.format(0); $("dailyNote").textContent = "Trag unter Budget ein, was du für Essen und Freizeit ausgeben willst."; }
+    // Pro Tag noch frei: alle flexiblen Kategorien zusammen
+    var fp = 0, frest = 0, dl = daysLeft();
+    flexCats().forEach(function (fc) { var p = amt(m, "expense", fc.id); fp += p; frest += Math.max(0, p - spentOf(m, fc.id)); });
+    if (fp <= 0) { $("daily").textContent = fmt.format(0); $("dailyNote").textContent = "Plane unter Budget Beträge für flexible Kategorien wie Lebensmittel."; }
     else if (dl.now) {
-      var rest = Math.max(0, food - spentOf(m, FOOD));
-      $("daily").textContent = fmt.format(rest / dl.left);
-      $("dailyNote").textContent = "noch " + fmt.format(rest) + " für " + dl.left + (dl.left === 1 ? " Tag" : " Tage");
-    } else { $("daily").textContent = fmt.format(food / dl.days); $("dailyNote").textContent = fmt.format(food) + " ÷ " + dl.days + " Tage"; }
+      $("daily").textContent = fmt.format(frest / dl.left);
+      $("dailyNote").textContent = "noch " + fmt.format(frest) + " für " + dl.left + (dl.left === 1 ? " Tag" : " Tage");
+    } else { $("daily").textContent = fmt.format(fp / dl.days); $("dailyNote").textContent = fmt.format(fp) + " ÷ " + dl.days + " Tage"; }
 
     // Sparziel
     var g = state.goal || 0, gn = $("goalNote");
@@ -729,15 +790,15 @@ html.booting .view.on { animation: none; }
     // Budget-Summen
     $("inSum").textContent = fmt.format(inc);
     $("outSum").textContent = fmt.format(plan);
-    $("inHead").textContent = "+" + fmt.format(inc);
-    $("outHead").textContent = "−" + fmt.format(plan);
+    $("inHead").textContent = (inc > 0 ? "+" : "") + fmt.format(inc);
+    $("outHead").textContent = (plan > 0 ? "−" : "") + fmt.format(plan);
     document.querySelectorAll(".spentnote").forEach(function (el) {
       var s = spentOf(m, el.dataset.cat);
-      el.textContent = s > 0 ? "schon ausgegeben: " + fmt.format(s) : "Ausgaben trägst du in der Übersicht ein";
+      el.textContent = s > 0 ? "schon ausgegeben: " + fmt.format(s) : "flexibel, Ausgaben trägst du in der Übersicht ein";
     });
-    var sem = m.expenses.filter(function (e) { return e.cat === SEM; })[0];
     document.querySelectorAll(".semnote").forEach(function (el) {
-      el.textContent = sem && sem.amount ? "zählt mit " + fmt.format(sem.amount / 6) + " pro Monat" : "ganzer Betrag pro Semester, wird auf 6 Monate verteilt";
+      var v = amt(m, "expense", el.dataset.cat);
+      el.textContent = v ? "zählt mit " + fmt.format(v / 6) + " pro Monat" : "Betrag für 6 Monate, wird durch 6 geteilt";
     });
 
     // Diagramme
@@ -748,13 +809,13 @@ html.booting .view.on { animation: none; }
     } else {
       $("bars").innerHTML = barsHtml(items, out);
       $("topBars").innerHTML = barsHtml(items.slice(0, 3), out);
-      var flex = items.filter(function (i) { return FIXED.indexOf(i.label) === -1; })[0];
+      var flex = items.filter(function (i) { return i.type === "flex"; })[0];
       var txt = "Am meisten gibst du für <b>" + esc(items[0].label) + "</b> aus: " + pct(items[0].amount, out) + " % deiner Ausgaben.";
       if (flex) {
         var cut = Math.max(1, Math.round(flex.amount * 0.1));
         txt += " Am ehesten sparen kannst du bei <b>" + esc(flex.label) + "</b>. Schon " + fmt.format(cut) + " weniger im Monat sind " + fmt.format(cut * 12) + " im Jahr.";
       }
-      if (sum(m.income) > 0 && base > 0) txt += " Wenn jeder Monat so läuft, bleiben dir im Jahr <b>" + fmt.format(base * 12) + "</b>.";
+      if (sumIn(m) > 0 && base > 0) txt += " Wenn jeder Monat so läuft, bleiben dir im Jahr <b>" + fmt.format(base * 12) + "</b>.";
       tip.innerHTML = txt; tip.hidden = false;
     }
 
@@ -763,7 +824,7 @@ html.booting .view.on { animation: none; }
     if (keys.length < 2) {
       $("cmp").innerHTML = '<p class="empty">Sobald du mehr als einen Monat eingetragen hast, siehst du hier, in welchem Monat dir mehr übrig blieb. Den Monat wechselst du oben mit den Pfeilen.</p>';
     } else {
-      var data = keys.map(function (k) { var mo = state.months[k], i = sum(mo.income), o = effOut(mo); return { k: k, i: i, o: o, r: i - o }; });
+      var data = keys.map(function (k) { var mo = state.months[k], i = sumIn(mo), o = effOut(mo); return { k: k, i: i, o: o, r: i - o }; });
       var maxAbs = Math.max.apply(null, data.map(function (d) { return Math.abs(d.r); })) || 1;
       var cols = '<div class="cols">' + data.map(function (d) {
         var mm = +d.k.split("-")[1] - 1;
@@ -788,20 +849,23 @@ html.booting .view.on { animation: none; }
   }
   var showAllSpent = false;
   function renderTrack(m) {
-    var dl = daysLeft(), html = "", free = 0, anyOver = false, anyPlan = false;
-    FLEX.forEach(function (c) {
-      var p = plannedOf(m, c), s = spentOf(m, c);
+    var dl = daysLeft(), html = "", free = 0, anyPlan = false, fc = flexCats();
+    fc.forEach(function (c) {
+      var p = amt(m, "expense", c.id), s = spentOf(m, c.id);
       if (p <= 0 && s <= 0) return;
       anyPlan = anyPlan || p > 0;
-      var rest = p - s, pct = p > 0 ? s / p * 100 : 100;
-      var cls = s > p ? " over" : pct >= 80 ? " warn" : "";
-      if (rest > 0) free += rest; else if (s > p) anyOver = true;
-      var perDay = c === FOOD && dl.now && rest > 0 ? "≈ " + fmt.format(rest / dl.left) + " pro Tag" : "";
-      html += '<div class="ftrack' + cls + '"><div class="top"><span>' + esc(FLEX_SHORT[c]) + '</span><b>' + fmt.format(s) + ' <span class="muted" style="font-weight:500">von ' + fmt.format(p) + '</span></b></div>' +
-        '<div class="bar"><i style="width:' + Math.min(100, pct).toFixed(1) + '%"></i></div>' +
+      var rest = p - s, pc = p > 0 ? s / p * 100 : 100;
+      var cls = s > p ? " over" : pc >= 80 ? " warn" : "";
+      if (rest > 0) free += rest;
+      var perDay = dl.now && rest > 0 ? "≈ " + fmt.format(rest / dl.left) + " pro Tag" : "";
+      html += '<div class="ftrack' + cls + '"><div class="top"><span>' + esc(label(c)) + '</span><b>' + fmt.format(s) + ' <span class="muted" style="font-weight:500">von ' + fmt.format(p) + '</span></b></div>' +
+        '<div class="bar"><i style="width:' + Math.min(100, pc).toFixed(1) + '%"></i></div>' +
         '<div class="info"><span class="left">' + (rest >= 0 ? "noch " + fmt.format(rest) + " übrig" : fmt.format(-rest) + " drüber") + '</span><span>' + perDay + '</span></div></div>';
     });
-    $("trackList").innerHTML = html || '<p class="empty">Plane unter Budget, wie viel du für Essen, Trinken &amp; Freizeit und Sonstiges ausgeben willst. Danach trägst du hier nach jedem Einkauf ein, was du ausgegeben hast.</p>';
+    $("trackList").innerHTML = html || (fc.length
+      ? '<p class="empty">Plane unter Budget, wie viel du für ' + fc.map(function (c) { return esc(label(c)); }).join(", ") + ' ausgeben willst. Danach trägst du hier nach jedem Einkauf ein, was du ausgegeben hast.</p>'
+      : '<p class="empty">Damit du hier Ausgaben eintragen kannst, stell unter Budget → Kategorien bearbeiten mindestens eine Kategorie auf „Flexibel“.</p>');
+    $("addSpend").hidden = !fc.length;
     var fh = $("freeHead");
     if (anyPlan) { fh.textContent = free > 0 ? "noch " + fmt.format(free) + " frei" : "Budget aufgebraucht"; fh.className = "sum " + (free > 0 ? "free" : "over"); }
     else { fh.textContent = ""; }
@@ -810,8 +874,9 @@ html.booting .view.on { animation: none; }
     var shown = showAllSpent ? list : list.slice(0, 5);
     $("spentList").innerHTML = list.length ? '<div class="title">Eingetragen</div>' + shown.map(function (s) {
       var d = new Date(s.t), ds = String(d.getDate()).padStart(2, "0") + "." + String(d.getMonth() + 1).padStart(2, "0") + ".";
-      return '<div class="sp" data-id="' + s.id + '"><span class="d">' + ds + '</span><div class="w"><span>' + esc(s.note || FLEX_SHORT[s.cat]) + '</span>' +
-        (s.note ? '<small>' + esc(FLEX_SHORT[s.cat]) + '</small>' : '') + '</div><span class="a">' + fmt.format(s.amount) + '</span>' +
+      var cc = catById(s.cat), cn = cc ? label(cc) : "Gelöschte Kategorie";
+      return '<div class="sp" data-id="' + s.id + '"><span class="d">' + ds + '</span><div class="w"><span>' + esc(s.note || cn) + '</span>' +
+        (s.note ? '<small>' + esc(cn) + '</small>' : '') + '</div><span class="a">' + fmt.format(s.amount) + '</span>' +
         '<button class="x spx" aria-label="Eintrag löschen">' + X_ICON + '</button></div>';
     }).join("") : "";
     var more = $("spentMore");
@@ -830,12 +895,14 @@ html.booting .view.on { animation: none; }
   });
 
   // Eingabe-Fenster
-  var spCat = FOOD;
-  $("spCats").innerHTML = FLEX.map(function (c) { return '<button type="button" data-cat="' + esc(c) + '" aria-pressed="false">' + esc(FLEX_SHORT[c]) + '</button>'; }).join("");
+  var spCat = null;
   function setCat(c) { spCat = c; document.querySelectorAll("#spCats button").forEach(function (b) { b.setAttribute("aria-pressed", b.dataset.cat === c ? "true" : "false"); }); }
   $("spCats").addEventListener("click", function (e) { var b = e.target.closest("button"); if (b) setCat(b.dataset.cat); });
   function openSheet() {
-    $("spAmt").value = ""; $("spNote").value = ""; $("spAmt").parentNode.classList.remove("bad"); setCat(FOOD);
+    var fc = flexCats(); if (!fc.length) return;
+    $("spCats").innerHTML = fc.map(function (c) { return '<button type="button" data-cat="' + c.id + '" aria-pressed="false">' + esc(label(c)) + '</button>'; }).join("");
+    $("spAmt").value = ""; $("spNote").value = ""; $("spAmt").parentNode.classList.remove("bad");
+    setCat(fc.some(function (c) { return c.id === spCat; }) ? spCat : fc[0].id);
     $("sheet").hidden = false; $("spAmt").focus();
   }
   function closeSheet() { $("sheet").hidden = true; document.activeElement && document.activeElement.blur && document.activeElement.blur(); }
@@ -845,7 +912,7 @@ html.booting .view.on { animation: none; }
     var m = month();
     m.spent.push({ id: uid(), amount: v, cat: spCat, note: $("spNote").value.trim(), t: ui.cur === today() ? Date.now() : new Date(+ui.cur.split("-")[0], +ui.cur.split("-")[1] - 1, 1, 12).getTime() });
     save(); closeSheet(); refresh();
-    var rest = plannedOf(m, spCat) - spentOf(m, spCat);
+    var rest = amt(m, "expense", spCat) - spentOf(m, spCat);
     toast(fmt.format(v) + " eingetragen. " + (rest >= 0 ? "Noch " + fmt.format(rest) + " übrig." : fmt.format(-rest) + " drüber."));
   }
   $("addSpend").addEventListener("click", openSheet);
@@ -862,6 +929,7 @@ html.booting .view.on { animation: none; }
   /* ---------- Bereiche ---------- */
   function showTab(k, keepScroll) {
     if (TABS.indexOf(k) < 0) k = "uebersicht";
+    if (k !== "budget" && ui.edit) { ui.edit = false; renderBudget(); }
     ui.tab = k;
     document.querySelectorAll(".view").forEach(function (v) { v.classList.toggle("on", v.dataset.tab === k); });
     document.querySelectorAll(".tab").forEach(function (b) { b.setAttribute("aria-current", b.dataset.tabBtn === k ? "page" : "false"); });
@@ -888,50 +956,67 @@ html.booting .view.on { animation: none; }
   });
 
   /* ---------- Eingaben ---------- */
-  function find(kind, id) {
-    var list = kind === "income" ? month().income : month().expenses;
-    for (var i = 0; i < list.length; i++) if (list[i].id === id) return { list: list, idx: i, item: list[i] };
-    return null;
-  }
   document.addEventListener("input", function (e) {
-    var r = e.target.closest && e.target.closest(".row"); if (!r) return;
-    var f = find(r.dataset.kind, r.dataset.id); if (!f) return;
-    if (e.target.classList.contains("n")) f.item.name = e.target.value;
-    else if (e.target.classList.contains("a")) { var v = parse(e.target.value); f.item.amount = isNaN(v) ? 0 : v; }
+    var r = e.target.closest && e.target.closest(".row"); if (!r || !r.dataset.cat) return;
+    var kind = r.dataset.kind, id = r.dataset.cat;
+    if (e.target.classList.contains("cn")) { var c = catById(id); if (c) c.name = e.target.value; }
+    else if (e.target.classList.contains("a")) {
+      var v = parse(e.target.value), map = mapOf(month(), kind);
+      if (!isNaN(v) && v > 0) map[id] = v; else delete map[id];
+    } else return;
     save(); refresh();
   });
   // Beim Verlassen des Feldes den Betrag sauber anzeigen (z. B. "18.99" → "18,99")
   document.addEventListener("focusout", function (e) {
     if (!e.target.classList || !e.target.classList.contains("a")) return;
-    var r = e.target.closest(".row"); var f = r && find(r.dataset.kind, r.dataset.id);
-    if (f) e.target.value = plain(f.item.amount);
+    var r = e.target.closest(".row"); if (!r || !r.dataset.cat) return;
+    e.target.value = plain(amt(month(), r.dataset.kind, r.dataset.cat));
   });
   // "Weiter" auf der Tastatur springt ins nächste Feld
   document.addEventListener("keydown", function (e) {
-    if (e.key !== "Enter" || !e.target.classList || !e.target.classList.contains("a")) return;
+    if (e.key !== "Enter" || !e.target.classList || !(e.target.classList.contains("a") || e.target.classList.contains("cn"))) return;
     e.preventDefault();
-    var all = Array.prototype.slice.call(document.querySelectorAll(".view.on input.a"));
+    var cls = e.target.classList.contains("a") ? "input.a" : "input.cn";
+    var all = Array.prototype.slice.call(document.querySelectorAll(".view.on " + cls));
     var nx = all[all.indexOf(e.target) + 1];
     if (nx) nx.focus(); else e.target.blur();
   });
 
-  var undo = null;
+  // Kategorien bearbeiten
+  $("editBtn").addEventListener("click", function () { ui.edit = !ui.edit; render(); });
   document.addEventListener("click", function (e) {
-    var x = e.target.closest && e.target.closest(".x"); if (!x) return;
-    var r = x.closest(".row"); var f = find(r.dataset.kind, r.dataset.id); if (!f) return;
-    var removed = f.list.splice(f.idx, 1)[0];
-    undo = { key: ui.cur, idx: f.idx, item: removed };
+    var t = e.target.closest && e.target.closest(".types button"); if (!t) return;
+    var c = catById(t.closest(".row").dataset.cat); if (!c) return;
+    c.type = t.dataset.type; save(); render();
+  });
+  document.addEventListener("click", function (e) {
+    var x = e.target.closest && e.target.closest(".cdel"); if (!x) return;
+    var r = x.closest(".row"), kind = r.dataset.kind, id = r.dataset.cat, list = cats(kind), idx = -1;
+    list.forEach(function (c, i) { if (c.id === id) idx = i; });
+    if (idx < 0) return;
+    // Für Rückgängig: Kategorie und alle ihre Beträge merken
+    var removed = list.splice(idx, 1)[0], kept = {}, keptSpent = {};
+    Object.keys(state.months).forEach(function (k) {
+      var mo = state.months[k], map = mapOf(mo, kind);
+      if (map[id]) { kept[k] = map[id]; delete map[id]; }
+      var sp = mo.spent.filter(function (s) { return s.cat === id; });
+      if (sp.length) { keptSpent[k] = sp; mo.spent = mo.spent.filter(function (s) { return s.cat !== id; }); }
+    });
     save(); render();
-    toast((removed.name ? "„" + removed.name + "“" : "Ausgabe") + " gelöscht.", function () {
-      if (!undo) return;
-      var m = month(undo.key); m.expenses.splice(undo.idx, 0, undo.item); undo = null; save(); render();
+    toast("„" + label(removed) + "“ gelöscht.", function () {
+      cats(kind).splice(idx, 0, removed);
+      Object.keys(kept).forEach(function (k) { if (state.months[k]) mapOf(state.months[k], kind)[id] = kept[k]; });
+      Object.keys(keptSpent).forEach(function (k) { if (state.months[k]) state.months[k].spent = state.months[k].spent.concat(keptSpent[k]); });
+      save(); render();
     });
   });
-  $("addExp").addEventListener("click", function () {
-    var it = { id: uid(), name: "", amount: 0, cat: "eigene" };
-    month().expenses.push(it); save(); render();
-    var n = document.querySelector('.row[data-id="' + it.id + '"] .n'); if (n) n.focus();
-  });
+  function addCat(kind) {
+    var c = kind === "income" ? { id: uid(), name: "" } : { id: uid(), name: "", type: "fix" };
+    cats(kind).push(c); ui.edit = true; save(); render();
+    var n = document.querySelector('.row[data-cat="' + c.id + '"] .cn'); if (n) n.focus();
+  }
+  $("addInc").addEventListener("click", function () { addCat("income"); });
+  $("addExp").addEventListener("click", function () { addCat("expense"); });
 
   /* ---------- Monatsende ---------- */
   $("actual").addEventListener("input", function () {
@@ -984,7 +1069,8 @@ html.booting .view.on { animation: none; }
       var d; try { d = JSON.parse(rd.result); } catch (e) { d = null; }
       if (!valid(d)) { toast("Diese Datei ist kein Finanzplaner-Backup."); return; }
       pending = d;
-      var n = Object.keys(d.months).filter(function (k) { return hasData(normalize(d.months[k])); }).length;
+      var md = migrate(JSON.parse(JSON.stringify(d)));
+      var n = Object.keys(md.months).filter(function (k) { return hasData(md.months[k]); }).length;
       $("importText").textContent = "Das Backup enthält " + n + (n === 1 ? " Monat" : " Monate") + ". Es ersetzt alles, was gerade in der App ist.";
       $("importConfirm").hidden = false;
     };
@@ -993,9 +1079,7 @@ html.booting .view.on { animation: none; }
   });
   $("importYes").addEventListener("click", function () {
     if (!pending) return;
-    var b = blank(); state = pending; for (var k in b) if (!(k in state)) state[k] = b[k];
-    Object.keys(state.months).forEach(function (k) { normalize(state.months[k]); });
-    state.goal = num(state.goal);
+    state = migrate(pending);
     pending = null; $("importConfirm").hidden = true;
     save(); applyTheme(); $("goal").value = plain(state.goal); render(); toast("Backup geladen.");
   });
@@ -1008,7 +1092,7 @@ html.booting .view.on { animation: none; }
   $("clearMonthNo").addEventListener("click", function () { $("clearMonthConfirm").hidden = true; });
   $("clearMonthYes").addEventListener("click", function () {
     var before = state.months[ui.cur];
-    state.months[ui.cur] = normalize({ income: [], expenses: [] });
+    state.months[ui.cur] = emptyMonth();
     $("clearMonthConfirm").hidden = true; save(); render();
     toast(monthName(ui.cur) + " geleert.", function () { state.months[ui.cur] = before; save(); render(); });
   });
@@ -1032,6 +1116,7 @@ html.booting .view.on { animation: none; }
   /* ---------- Start ---------- */
   // Bestehende Monate in die aktuelle Form bringen
   Object.keys(state.months).forEach(function (k) { normalize(state.months[k]); });
+  save(); // alte Daten gleich in der neuen Form speichern
   // Neuer Monat: Beträge vom letzten Monat automatisch übernehmen, weil sich die meisten Kosten wiederholen
   (function () {
     var k = today();
