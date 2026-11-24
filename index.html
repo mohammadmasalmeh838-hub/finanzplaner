@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de" class="booting">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -232,9 +232,34 @@ button { cursor: pointer; }
 .toast button { border: 0; background: transparent; color: var(--accent-soft); font-weight: 700; padding: 6px 8px; border-radius: 8px; }
 .toast button[hidden] { display: none; }
 [hidden] { display: none !important; }
+
+/* Startbildschirm: Logo auf Navy, Balken wachsen hoch, dann blendet die App ein */
+html { background: #0f2347; }
+.splash { position: fixed; inset: 0; z-index: 100; background: #0f2347; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+  transition: opacity .45s ease, visibility .45s; }
+.splash.out { opacity: 0; visibility: hidden; }
+.splash svg { width: 112px; height: 112px; animation: pop .55s cubic-bezier(.2, .9, .3, 1.2) both; }
+.splash rect.bar { transform-box: fill-box; transform-origin: bottom; animation: grow .6s cubic-bezier(.3, .8, .3, 1) both; }
+.splash rect.b2 { animation-delay: .12s; }
+.splash rect.b3 { animation-delay: .24s; }
+.splash .name { font: 600 26px/1 var(--font-text); color: #f3f6fc; letter-spacing: -.01em; animation: rise .5s .3s ease both; }
+.splash .sub { font: 500 13px/1 var(--font-text); color: #9fb2d6; letter-spacing: .04em; margin-top: -8px; animation: rise .5s .4s ease both; }
+@keyframes pop { from { transform: scale(.82); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes grow { from { transform: scaleY(0); } to { transform: none; } }
+@keyframes rise { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+/* Während des Starts keine Übergänge, damit nichts herumspringt */
+html.booting *, html.booting *::before, html.booting *::after { transition: none !important; }
+html.booting .view.on { animation: none; }
+@media (prefers-reduced-motion: reduce) { .splash svg, .splash rect.bar, .splash .name, .splash .sub { animation: none !important; } }
 </style>
 </head>
 <body>
+
+<div class="splash" id="splash" aria-hidden="true">
+  <svg viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#18305e"/><rect class="bar" x="141" y="256" width="67" height="143" rx="18" fill="#5c78b0"/><rect class="bar b2" x="223" y="184" width="67" height="215" rx="18" fill="#9fb2d6"/><rect class="bar b3" x="304" y="113" width="67" height="286" rx="18" fill="#6fe0a8"/></svg>
+  <div class="name">Finanzen</div>
+  <div class="sub">DEIN MONAT IM BLICK</div>
+</div>
 
 <header class="head">
   <div class="head-in">
@@ -391,7 +416,7 @@ button { cursor: pointer; }
 <script>
 (function () {
   "use strict";
-  var APP_VERSION = 1;
+  var APP_VERSION = 2;
   var KEY = "finanzplaner-v1";
   var TABS = ["uebersicht", "budget", "auswertung", "einstellungen"];
   var INCATS = ["Minijob", "BAföG", "Sonstiges"];
@@ -415,6 +440,7 @@ button { cursor: pointer; }
   var state = load();
   var ui = { tab: "uebersicht", cur: today() };
   var storageOk = true;
+  var splashOn = true, afterSplash = [];
 
   function blank() { return { v: 1, months: {}, goal: 0, theme: "system" }; }
   function valid(d) { return d && typeof d === "object" && d.months && typeof d.months === "object"; }
@@ -696,7 +722,8 @@ button { cursor: pointer; }
     if (t === "system") root.removeAttribute("data-theme"); else root.setAttribute("data-theme", t);
     document.querySelectorAll("[data-theme-set]").forEach(function (b) { b.setAttribute("aria-pressed", b.dataset.themeSet === t ? "true" : "false"); });
     var dark = t === "dark" || (t === "system" && window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches);
-    $("themeColor").setAttribute("content", dark ? "#0b1120" : "#f2f4f8");
+    $("themeColor").setAttribute("content", splashOn ? "#0f2347" : dark ? "#0b1120" : "#f2f4f8");
+    document.documentElement.style.background = splashOn ? "" : (dark ? "#0b1120" : "#f2f4f8");
   }
   document.querySelectorAll("[data-theme-set]").forEach(function (b) {
     b.addEventListener("click", function () { state.theme = b.dataset.themeSet; save(); applyTheme(); });
@@ -780,7 +807,7 @@ button { cursor: pointer; }
     var k = today();
     if (!hasData(peek(k))) {
       var src = lastFilledBefore(k);
-      if (src) { state.months[k] = copyFrom(src); save(); setTimeout(function () { toast("Neuer Monat: Beträge aus " + monthName(src) + " übernommen."); }, 600); }
+      if (src) { state.months[k] = copyFrom(src); save(); afterSplash.push(function () { toast("Neuer Monat: Beträge aus " + monthName(src) + " übernommen."); }); }
     }
   })();
   var standalone = (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
@@ -793,6 +820,22 @@ button { cursor: pointer; }
     var h = location.hash.slice(1), last = "uebersicht";
     try { last = localStorage.getItem("finanzplaner-tab") || "uebersicht"; } catch (e) {}
     showTab(TABS.indexOf(h) > -1 ? h : last, true);
+  })();
+
+  // Startbildschirm ausblenden, sobald Schriften geladen sind und das Logo kurz zu sehen war
+  (function () {
+    var reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var minTime = new Promise(function (r) { setTimeout(r, reduce ? 300 : 1100); });
+    var fonts = document.fonts && document.fonts.ready ? document.fonts.ready.catch(function () {}) : Promise.resolve();
+    var maxTime = new Promise(function (r) { setTimeout(r, 2500); });
+    Promise.race([Promise.all([minTime, fonts]), maxTime]).then(function () {
+      requestAnimationFrame(function () {
+        splashOn = false; applyTheme();
+        document.documentElement.classList.remove("booting");
+        $("splash").classList.add("out");
+        setTimeout(function () { var s = $("splash"); if (s) s.remove(); afterSplash.forEach(function (f) { f(); }); }, 500);
+      });
+    });
   })();
 
   // Am Monatsende/-anfang beim Zurückkehren in die App den richtigen Monat zeigen
