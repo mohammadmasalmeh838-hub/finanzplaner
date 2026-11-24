@@ -1,8 +1,8 @@
 // Hält die App offline nutzbar.
 // Die Seite selbst: online immer frisch geladen (Updates sofort sichtbar), offline aus dem Speicher.
 // Icons und Manifest: sofort aus dem Speicher, im Hintergrund aktualisiert.
-// Schriften von Google Fonts: einmal geladen, danach aus dem Speicher.
-var V = "finanz-v5";
+// Schriften von Google Fonts und die Supabase-Bibliothek: einmal geladen, danach aus dem Speicher.
+var V = "finanz-v6";
 var SHELL = ["./", "index.html", "manifest.webmanifest", "icon.svg", "icon-180.png", "icon-192.png", "icon-512.png"];
 self.addEventListener("install", function (e) {
   e.waitUntil(caches.open(V).then(function (c) {
@@ -41,7 +41,7 @@ self.addEventListener("fetch", function (e) {
     }));
     return;
   }
-  if (/fonts\.(googleapis|gstatic)\.com$/.test(url.hostname)) {
+  if (/fonts\.(googleapis|gstatic)\.com$|cdn\.jsdelivr\.net$/.test(url.hostname)) {
     e.respondWith(caches.open(V).then(function (c) {
       return c.match(req).then(function (hit) {
         return hit || fetch(req).then(function (res) { if (res.ok || res.type === "opaque") c.put(req, res.clone()); return res; });

@@ -216,6 +216,20 @@ button { cursor: pointer; }
 .steps { margin: 0; padding-left: 20px; font-size: 14px; display: flex; flex-direction: column; gap: 4px; }
 .about { text-align: center; color: var(--muted); font-size: 12.5px; margin: 4px 0 0; }
 
+/* Konto */
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.acct-form { display: flex; flex-direction: column; gap: 10px; }
+.acct-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.acct-form input { border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); height: 46px; padding: 0 14px; font-size: 16px; outline: none; color: var(--fg); font-weight: 400; }
+.acct-form input:focus { border-color: var(--accent); background: var(--surface); }
+.seg.two { grid-template-columns: repeat(2, 1fr); }
+.acct-msg { margin: 0; font-size: 14px; background: var(--out-soft); color: var(--fg); border-radius: 12px; padding: 10px 12px; }
+.acct-msg.ok { background: var(--in-soft); }
+.acct-who { margin: 0; font-size: 14px; }
+.sync-state { margin: 0; font-size: 13px; color: var(--muted); }
+.sync-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--in); }
+.sync-dot.off { background: #d99a1e; }
+
 /* Kategorien bearbeiten */
 .view-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .edit-btn { border: 0; background: var(--accent-soft); color: var(--accent); font-weight: 600; border-radius: 999px; padding: 8px 14px; font-size: 14px; margin-top: 6px; }
@@ -346,6 +360,11 @@ html.booting .view.on { animation: none; }
       <p>Trag unter Budget ein, was du im Monat bekommst und was du ausgibst. Mit „Kategorien bearbeiten“ passt du die Kategorien an dich an. Dann siehst du hier sofort, was dir übrig bleibt.</p>
       <button class="btn" data-go="budget">Jetzt eintragen</button>
     </div>
+    <div class="note-card" id="acctNudge" hidden>
+      <strong>Daten sichern</strong>
+      <p>Melde dich mit deiner E-Mail an. Dann werden deine Daten automatisch gespeichert und sind auf jedem Handy gleich. Ein Backup brauchst du dann nicht mehr.</p>
+      <div class="btn-row"><button class="btn" data-go="einstellungen">Anmelden</button><button class="btn ghost" id="nudgeLater">Später</button></div>
+    </div>
     <div class="note-card" id="carry" hidden>
       <p id="carryText"></p>
       <button class="btn" id="carryBtn">Vom Vormonat übernehmen</button>
@@ -437,6 +456,10 @@ html.booting .view.on { animation: none; }
   <!-- Einstellungen -->
   <main class="view" data-tab="einstellungen">
     <h2 class="view-title">Einstellungen</h2>
+    <section class="card" id="acctCard">
+      <div class="card-head"><h2>Konto</h2><span class="sync-dot" id="syncDot" hidden></span></div>
+      <div id="acctBody"></div>
+    </section>
     <section class="card">
       <div class="card-head"><h2>Sparziel</h2></div>
       <div class="set-row">
@@ -454,7 +477,7 @@ html.booting .view.on { animation: none; }
     </section>
     <section class="card">
       <div class="card-head"><h2>Deine Daten</h2></div>
-      <p class="muted small" style="margin:0">Alles bleibt nur auf diesem Gerät gespeichert. Mach ab und zu ein Backup, falls du das Handy wechselst.</p>
+      <p class="muted small" style="margin:0" id="dataNote">Alles bleibt nur auf diesem Gerät gespeichert. Mach ab und zu ein Backup, falls du das Handy wechselst.</p>
       <div class="list-btns">
         <button class="btn ghost full" id="exportBtn">Backup speichern</button>
         <button class="btn ghost full" id="importBtn">Backup laden</button>
@@ -470,7 +493,7 @@ html.booting .view.on { animation: none; }
         </div>
         <button class="btn danger full" id="clearAll">Alle Daten löschen</button>
         <div class="confirm" id="clearAllConfirm" hidden>
-          <p>Alle Monate und dein Sparziel werden gelöscht. Das kann man nicht rückgängig machen.</p>
+          <p id="clearAllText">Alle Monate und dein Sparziel werden gelöscht. Das kann man nicht rückgängig machen.</p>
           <div class="two"><button class="btn danger" id="clearAllYes">Endgültig löschen</button><button class="btn ghost" id="clearAllNo">Abbrechen</button></div>
         </div>
       </div>
@@ -511,10 +534,11 @@ html.booting .view.on { animation: none; }
 
 <div class="toast" id="toast" role="status" aria-live="polite"><span id="toastText"></span><button id="toastBtn" hidden>Rückgängig</button></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.js"></script>
 <script>
 (function () {
   "use strict";
-  var APP_VERSION = 5;
+  var APP_VERSION = 6;
   var KEY = "finanzplaner-v1";
   var TABS = ["uebersicht", "budget", "auswertung", "einstellungen"];
   var TYPES = [["fix", "Fest"], ["flex", "Flexibel"], ["semester", "Halbjährlich"]];
@@ -552,7 +576,7 @@ html.booting .view.on { animation: none; }
       expense: src.expense.map(function (c) { return { id: uid(), name: c.name, type: c.type || "fix" }; })
     };
   }
-  function blank() { return { v: 2, months: {}, goal: 0, theme: "system", cats: newCats(DEFAULT_CATS) }; }
+  function blank() { return { v: 2, t: 0, months: {}, goal: 0, theme: "system", cats: newCats(DEFAULT_CATS) }; }
   function valid(d) { return d && typeof d === "object" && d.months && typeof d.months === "object"; }
 
   /* Bis Version 4 waren die Kategorien fest eingebaut und die Monate als Listen gespeichert.
@@ -592,13 +616,16 @@ html.booting .view.on { animation: none; }
     d.cats.expense = (d.cats.expense || []).filter(function (c) { return c && c.id; }).map(function (c) { return { id: c.id, name: String(c.name || ""), type: ["fix", "flex", "semester"].indexOf(c.type) > -1 ? c.type : "fix" }; });
     Object.keys(d.months).forEach(function (k) { d.months[k] = normalize(d.months[k] || {}); });
     d.goal = num(d.goal);
+    d.t = +d.t || 0;
     return d;
   }
   function load() {
     try { var d = JSON.parse(localStorage.getItem(KEY)); if (valid(d)) return migrate(d); } catch (e) {}
     return blank();
   }
-  function save() {
+  // quiet = nur speichern, ohne es als neue Änderung zu zählen (z. B. beim Start oder nach dem Laden aus dem Konto)
+  function save(quiet) {
+    if (!quiet) { state.t = Date.now(); var cm = state.months[ui.cur]; if (cm) cm.u = state.t; scheduleSync(); }
     try { localStorage.setItem(KEY, JSON.stringify(state)); storageOk = true; }
     catch (e) { if (storageOk) toast("Speichern hat nicht geklappt. Ist der Speicher voll?"); storageOk = false; }
   }
@@ -1103,6 +1130,142 @@ html.booting .view.on { animation: none; }
     $("clearAllConfirm").hidden = true; save(); $("goal").value = ""; render(); toast("Alle Daten gelöscht.");
   });
 
+  /* ---------- Konto & Abgleich über Supabase ----------
+     Gleiches Supabase-Projekt wie die Muraja-App, eigene Tabelle finanz_state (eine Zeile pro Nutzer).
+     Ohne Anmeldung oder ohne Internet funktioniert alles wie bisher nur auf dem Gerät. */
+  var SB_URL = "https://deefhihuesferlmpwayn.supabase.co", SB_KEY = "sb_publishable_5dLqf2s1flROOwmba6q5aA_aeKd9SjU";
+  var sb = null, sbUser = null, linked = false, base = null, syncing = null, again = false, syncTimer = null, lastSync = 0, syncErr = false;
+  var acct = { mode: "login", msg: "", ok: false, busy: false, mail: "", later: false, key: "" };
+  try { base = JSON.parse(localStorage.getItem("finanz-base") || "null"); } catch (e) {}
+  try { acct.later = localStorage.getItem("finanz-acct-later") === "1"; } catch (e) {}
+  function setBase(t) { base = t == null ? null : { t: t, uid: sbUser ? sbUser.id : null }; try { localStorage.setItem("finanz-base", JSON.stringify(base)); } catch (e) {} }
+  function localEmpty() { return !Object.keys(state.months).some(function (k) { var m = state.months[k]; return hasData(m) || (m.spent && m.spent.length) || m.actualLeft !== null; }); }
+  function scheduleSync() { if (!linked) return; clearTimeout(syncTimer); syncTimer = setTimeout(sync, 900); }
+  function adopt(obj) { state = migrate(obj); save(true); applyTheme(); $("goal").value = plain(state.goal); render(); }
+  // Beide Seiten geändert: neuere Einstellungen gewinnen, Kategorien werden zusammengelegt, jeder Monat kommt von der Seite, die ihn zuletzt geändert hat.
+  function mergeStates(L, R) {
+    var newer = (L.t || 0) >= (R.t || 0) ? L : R, older = newer === L ? R : L, M = JSON.parse(JSON.stringify(newer));
+    ["income", "expense"].forEach(function (kind) {
+      var ids = {}; M.cats[kind].forEach(function (c) { ids[c.id] = 1; });
+      older.cats[kind].forEach(function (c) { if (!ids[c.id]) M.cats[kind].push(JSON.parse(JSON.stringify(c))); });
+    });
+    Object.keys(older.months).forEach(function (k) {
+      var a = M.months[k], b = older.months[k];
+      if (!a || (b.u || 0) > (a.u || 0)) M.months[k] = JSON.parse(JSON.stringify(b));
+    });
+    M.t = Date.now();
+    return M;
+  }
+  function sync() {
+    if (!linked || !sbUser) return Promise.resolve();
+    if (syncing) { again = true; return syncing; }
+    var uidNow = sbUser.id;
+    syncing = sb.from("finanz_state").select("json,t").eq("user_id", uidNow).maybeSingle().then(function (r) {
+      if (r.error) throw r.error;
+      var R = null;
+      if (r.data) { try { R = migrate(JSON.parse(r.data.json)); } catch (e) {} }
+      if (R && (!base || R.t !== base.t)) {
+        if ((!base && localEmpty()) || (base && state.t === base.t)) { adopt(R); setBase(R.t); return; }
+        if (state.t === R.t) { setBase(R.t); return; }
+        adopt(mergeStates(state, R));
+      } else if (R && state.t === R.t) { setBase(R.t); return; }
+      if (!R && localEmpty()) return;
+      var t = state.t;
+      return sb.from("finanz_state").upsert({ user_id: uidNow, json: JSON.stringify(state), t: t, updated_at: new Date().toISOString() }).then(function (w) {
+        if (w.error) throw w.error;
+        setBase(t);
+      });
+    }).then(function () { syncErr = false; lastSync = Date.now(); }, function (e) { syncErr = true; try { console.warn("Abgleich", e); } catch (x) {} })
+      .then(function () { syncing = null; renderAcct(); if (again) { again = false; return sync(); } });
+    return syncing;
+  }
+  function useSession(session) {
+    sbUser = session && session.user ? session.user : null;
+    if (!sbUser) { linked = false; renderAcct(); return; }
+    if (base && base.uid !== sbUser.id) setBase(null);
+    linked = true; renderAcct(); sync();
+  }
+  function authError(e) {
+    var m = String(e && e.message || "");
+    if (/Invalid login/i.test(m)) return acct.mode === "login" ? "E-Mail oder Passwort stimmt nicht. Noch kein Konto? Dann tippe oben auf „Neues Konto“." : "E-Mail oder Passwort stimmt nicht.";
+    if (/not confirmed/i.test(m)) return "Bitte bestätige zuerst deine E-Mail-Adresse über den Link in der E-Mail, dann melde dich hier an.";
+    if (/already registered|already exists/i.test(m)) return "Für diese E-Mail gibt es schon ein Konto. Tippe oben auf „Anmelden“.";
+    if (/at least 6|Password should/i.test(m)) return "Das Passwort muss mindestens 6 Zeichen haben.";
+    if (/rate limit|too many/i.test(m)) return "Zu viele Versuche. Warte kurz und versuch es noch einmal.";
+    if (/invalid.*email|email.*invalid/i.test(m)) return "Diese E-Mail-Adresse sieht nicht richtig aus.";
+    if (/fetch|network/i.test(m)) return "Keine Verbindung zum Internet.";
+    return "Das hat nicht geklappt: " + m;
+  }
+  function syncText() {
+    if (syncErr) return "Gerade keine Verbindung. Deine Änderungen werden gespeichert, sobald du wieder online bist.";
+    if (!lastSync) return "Wird gespeichert …";
+    var d = new Date(lastSync);
+    return "Alles gespeichert · zuletzt " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0") + " Uhr";
+  }
+  function renderAcct() {
+    var body = $("acctBody");
+    $("acctNudge").hidden = !sb || !!sbUser || acct.later;
+    $("dataNote").textContent = sbUser ? "Deine Daten werden automatisch in deinem Konto gespeichert. Ein Backup brauchst du nicht, du kannst aber trotzdem eins speichern."
+      : "Ohne Anmeldung bleibt alles nur auf diesem Gerät. Mach dann ab und zu ein Backup, falls du das Handy wechselst.";
+    $("clearAllText").textContent = sbUser ? "Alle Monate und dein Sparziel werden gelöscht, auf diesem Gerät und in deinem Konto. Das kann man nicht rückgängig machen."
+      : "Alle Monate und dein Sparziel werden gelöscht. Das kann man nicht rückgängig machen.";
+    var dot = $("syncDot"); dot.hidden = !sbUser; dot.className = "sync-dot" + (syncErr ? " off" : "");
+    var key = [!!sb, sbUser ? sbUser.id : "", acct.mode, acct.busy, acct.msg].join("|");
+    if (key === acct.key) { var st = $("syncState"); if (st) st.textContent = syncText(); return; }
+    acct.key = key;
+    if (!sb) { body.innerHTML = '<p class="sync-state">Für die Anmeldung braucht die App einmal Internet.</p>'; return; }
+    if (sbUser) {
+      body.innerHTML = '<p class="acct-who">Angemeldet als <b>' + esc(sbUser.email || "") + '</b>. Deine Daten werden automatisch gespeichert und sind auf jedem Gerät gleich, auf dem du dich anmeldest.</p>' +
+        '<p class="sync-state" id="syncState">' + esc(syncText()) + '</p>' +
+        '<div class="btn-row"><button class="btn ghost" id="logoutBtn">Abmelden</button></div>';
+      return;
+    }
+    var reg = acct.mode === "register";
+    body.innerHTML = '<div class="seg two" role="group" aria-label="Anmelden oder Konto anlegen">' +
+      '<button type="button" data-acct-mode="login" aria-pressed="' + !reg + '">Anmelden</button>' +
+      '<button type="button" data-acct-mode="register" aria-pressed="' + reg + '">Neues Konto</button></div>' +
+      '<p class="sync-state">' + (reg ? "Nur einmal nötig. Danach meldest du dich auf jedem Handy mit derselben E-Mail und demselben Passwort an." : "Melde dich an, dann werden deine Daten automatisch gespeichert und sind auf jedem Gerät gleich.") + '</p>' +
+      '<form class="acct-form" id="acctForm" autocomplete="on">' +
+      '<label>E-Mail<input name="email" type="email" autocomplete="username email" inputmode="email" autocapitalize="off" value="' + esc(acct.mail) + '" required></label>' +
+      '<label>Passwort' + (reg ? " (mindestens 6 Zeichen)" : "") + '<input name="password" type="password" minlength="6" autocomplete="' + (reg ? "new-password" : "current-password") + '" required></label>' +
+      '<button class="btn full" type="submit"' + (acct.busy ? " disabled" : "") + '>' + (acct.busy ? "Moment …" : reg ? "Konto anlegen" : "Anmelden") + '</button></form>' +
+      (acct.msg ? '<p class="acct-msg' + (acct.ok ? " ok" : "") + '">' + esc(acct.msg) + '</p>' : "");
+  }
+  document.addEventListener("click", function (e) {
+    var m = e.target.closest && e.target.closest("[data-acct-mode]");
+    if (m) { acct.mode = m.dataset.acctMode; acct.msg = ""; renderAcct(); return; }
+    if (e.target.id === "logoutBtn" && sb) {
+      sb.auth.signOut().then(function () { toast("Abgemeldet. Deine Daten bleiben auf diesem Gerät."); });
+    }
+  });
+  $("nudgeLater").addEventListener("click", function () { acct.later = true; try { localStorage.setItem("finanz-acct-later", "1"); } catch (e) {} renderAcct(); });
+  document.addEventListener("submit", function (e) {
+    if (e.target.id !== "acctForm") return;
+    e.preventDefault();
+    if (!sb || acct.busy) return;
+    var f = e.target, mail = f.elements.email.value.trim(), pw = f.elements.password.value, reg = acct.mode === "register";
+    acct.mail = mail; acct.busy = true; acct.msg = ""; acct.ok = false; renderAcct();
+    (reg ? sb.auth.signUp({ email: mail, password: pw }) : sb.auth.signInWithPassword({ email: mail, password: pw })).then(function (r) {
+      acct.busy = false;
+      if (r.error) { acct.msg = authError(r.error); renderAcct(); return; }
+      if (!r.data.session) { acct.mode = "login"; acct.ok = true; acct.msg = "Konto angelegt. Falls du eine E-Mail bekommst, tippe dort auf den Link. Dann melde dich hier an."; renderAcct(); return; }
+      acct.msg = ""; renderAcct(); toast("Angemeldet. Deine Daten werden jetzt automatisch gespeichert.");
+    }).catch(function (err) { acct.busy = false; acct.msg = authError(err); renderAcct(); });
+  });
+  function initSupabase() {
+    if (!window.supabase || typeof window.supabase.createClient !== "function") { renderAcct(); return; }
+    try { sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storageKey: "finanz-auth" } }); }
+    catch (e) { sb = null; renderAcct(); return; }
+    renderAcct();
+    sb.auth.onAuthStateChange(function (ev, session) {
+      if (ev === "TOKEN_REFRESHED" && sbUser) return;
+      setTimeout(function () { useSession(session); }, 0);
+    });
+    setInterval(function () { if (linked && document.visibilityState === "visible") sync(); }, 20000);
+    document.addEventListener("visibilitychange", function () { if (linked && document.visibilityState === "visible") sync(); });
+    window.addEventListener("online", function () { if (linked) sync(); });
+  }
+
   /* ---------- Meldung ---------- */
   var tt;
   function toast(text, onUndo) {
@@ -1116,7 +1279,7 @@ html.booting .view.on { animation: none; }
   /* ---------- Start ---------- */
   // Bestehende Monate in die aktuelle Form bringen
   Object.keys(state.months).forEach(function (k) { normalize(state.months[k]); });
-  save(); // alte Daten gleich in der neuen Form speichern
+  save(true); // alte Daten gleich in der neuen Form speichern
   // Neuer Monat: Beträge vom letzten Monat automatisch übernehmen, weil sich die meisten Kosten wiederholen
   (function () {
     var k = today();
@@ -1131,6 +1294,7 @@ html.booting .view.on { animation: none; }
   $("goal").value = plain(state.goal);
   applyTheme();
   render();
+  initSupabase();
   (function () {
     var h = location.hash.slice(1), last = "uebersicht";
     try { last = localStorage.getItem("finanzplaner-tab") || "uebersicht"; } catch (e) {}
